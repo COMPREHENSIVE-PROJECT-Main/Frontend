@@ -1,27 +1,5 @@
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+# 실행 전 사용해야할 명령어
+npm install axios @tanstack/react-query ai lucide-react
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files (민감한 API 키/JWT 비밀키 보호)
-.env*.local
-.env
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# 로컬 실행 코드
+npm run dev
