@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link"; // 페이지 이동을 위한 Link 추가
+import Link from "next/link";
 import { Mail, Lock, Gavel, ArrowRight, UserPlus } from "lucide-react"; 
 import { motion } from "framer-motion";
 
+import apiClient from "../../src/lib/api-client"; 
+
 export default function LoginPage() {
+
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,12 +20,32 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // 인증 시뮬레이션 (0.8초 지연)
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      document.cookie = "auth_token=true; path=/; max-age=3600"; 
-      router.push("/case-input");
-    } catch (error) {
-      alert("로그인 정보가 올바르지 않습니다.");
+
+      const response = await apiClient.post("api/auth/login", {
+        username: email, // UI의 email 값을 백엔드가 원하는 username 키에 담아서 보냅니다.
+        password: password,
+      });
+
+      // 2. 백엔드가 주는 두 가지 토큰 받기
+      const { access_token, refresh_token } = response.data;
+      
+      if (access_token) {
+        // 토큰을 LocalStorage에 저장
+        localStorage.setItem("accessToken", access_token);
+        localStorage.setItem("refreshToken", refresh_token);
+        
+        document.cookie = `auth_token=true; path=/; max-age=3600`;
+        
+        console.log("로그인 성공! 토큰 발급 완료");
+        
+        // 로그인 성공 시 사건 입력 페이지로 이동
+        router.push("/case-input");
+      }
+    } catch (error: any) {
+      // 3. 상세 메시지를 그대로 화면에 띄워줌
+      console.error("로그인 에러:", error);
+      const errorDetail = error.response?.data?.detail;
+      alert(errorDetail || "아이디 또는 비밀번호가 올바르지 않습니다.");
     } finally {
       setIsLoading(false);
     }

@@ -6,37 +6,76 @@ import Link from "next/link";
 import { Mail, Lock, User, Gavel, ArrowRight, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 
+// API 클라이언트 불러오기
+import apiClient from "../../src/lib/api-client"; 
+
 export default function RegisterPage() {
   const router = useRouter();
+  
+  // 상태 변수들
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // 백엔드와 연결된 실제 회원가입 함수
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (password !== confirmPassword) {
       alert("비밀번호가 일치하지 않습니다.");
       return;
     }
 
     setIsLoading(true);
+    
     try {
-      // 회원가입 API 호출 시뮬레이션
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      alert("회원가입이 완료되었습니다! 로그인 페이지로 이동합니다.");
-      router.push("/login");
-    } catch (error) {
-      alert("회원가입 중 오류가 발생했습니다.");
-    } finally {
+      // 백엔드 주소 설정
+      const response = await apiClient.post("/api/auth/register", {
+        username: email,    // 백엔드는 아이디 대신 username을 씀
+        password: password, // 비밀번호
+
+      });
+
+      // 201(Created) 응답 확인
+      if (response.status === 201 || response.status === 200) {
+        alert("🎉 회원가입 성공! 로그인 페이지로 이동합니다.");
+        router.push("/login");
+      }
+
+    } catch (error: any) {
+      // 에러 확인용 코드
+      console.log("백엔드 상세 에러 정보:", error.response?.data);
+      
+      const detail = error.response?.data?.detail;
+      const message = Array.isArray(detail) ? detail[0].msg : detail;
+      alert(`가입 실패: ${message || "형식이 올바르지 않습니다."}`);
+    }finally {
       setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 px-6">
-      {/* 상단 로고 및 타이틀 */}
+      {/* 상단 로고 및 타이틀 (디자인) */}
+      <motion.div 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10"
+      >
+        <div className="flex justify-center mb-5">
+          <div className="bg-blue-600 p-4 rounded-3xl shadow-xl shadow-blue-100">
+            <Gavel className="w-10 h-10 text-white" />
+          </div>
+        </div>
+        <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">
+          계정 만들기
+        </h2>
+        <p className="mt-3 text-sm text-gray-500 font-medium">
+          단 몇 초만에 가입하고 AI 재판 시뮬레이터를 경험해보세요.
+        </p>
+      </motion.div>
 
       {/* 회원가입 카드 */}
       <motion.div 
@@ -63,19 +102,19 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* 이메일 입력 */}
+            {/* 이메일(아이디) 입력 */}
             <div>
               <label className="flex items-center gap-2 text-sm font-bold mb-3 text-gray-700">
                 <Mail className="w-4 h-4 text-blue-500" />
-                이메일 주소
+                아이디 (이메일)
               </label>
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full border border-gray-100 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-all text-sm"
-                placeholder="name@example.com"
+                placeholder="아이디를 입력하세요"
               />
             </div>
 
