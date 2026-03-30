@@ -4,3 +4,5 @@ npx create-next-app@latest
 npm install axios @tanstack/react-query ai lucide-react reactflow
 # 로컬 실행 명령어
 npm run dev
+# 릴리즈 다운시
+main 다운 받고 덮어쓰기
