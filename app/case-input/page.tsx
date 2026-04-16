@@ -2,170 +2,316 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, X, Gavel, Loader2, CheckCircle2 } from "lucide-react"; // Lucide React 활용
-import { motion, AnimatePresence } from "framer-motion"; // Framer Motion 활용
+import { 
+  FileText, Upload, Gavel, Loader2, CheckCircle2, 
+  AlertTriangle, X, CheckCircle, ChevronDown, MessageSquare, Edit3, RefreshCw 
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import apiClient from "../../src/lib/api-client";
 
+// --- 1. 사건 유형 상세 설정 ---
+const typeDetails = {
+  criminal: { 
+    name: "형사 사건", 
+    description: "폭행, 절도, 사기 등 범죄 피해를 입어 처벌을 원하는 경우",
+    color: "border-red-500 bg-red-50/50", 
+    textColor: "text-red-700" 
+  },
+  civil: { 
+    name: "민사 사건", 
+    description: "돈, 계약, 재산 등 개인 간의 분쟁 해결이 필요한 경우",
+    color: "border-emerald-500 bg-emerald-50/50", 
+    textColor: "text-emerald-700" 
+  },
+};
+
+// --- 2. 사건 최종 확인 및 AI 추가 질문 모달 ---
+interface CaseConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onFinalSubmit: (answers: string, finalType: string, finalDesc: string) => void;
+  onReAnalyze: (newDesc: string) => void;
+  isReAnalyzing: boolean;
+  
+  initialDescription: string;
+  mlPredictedType: string;
+  isSubmitting: boolean;
+  dynamicQuestions: string[];
+}
+
+function CaseConfirmModal({
+  isOpen, onClose, onFinalSubmit, onReAnalyze, isReAnalyzing, 
+  initialDescription, mlPredictedType, isSubmitting, dynamicQuestions = []
+}: CaseConfirmModalProps) {
+  const [finalCaseType, setFinalCaseType] = useState<"criminal" | "civil">(mlPredictedType as "criminal" | "civil");
+  const [editedDescription, setEditedDescription] = useState(initialDescription);
+  const [isEditing, setIsEditing] = useState(false);
+  const [answers, setAnswers] = useState<string[]>([]);
+
+  // 부모의 데이터가 업데이트되면 모달 상태 동기화
+  useEffect(() => {
+    if (isOpen) {
+      setFinalCaseType((mlPredictedType as "criminal" | "civil") || "criminal");
+      setEditedDescription(initialDescription);
+      const qCount = (dynamicQuestions || []).length;
+      setAnswers(new Array(qCount).fill(""));
+      setIsEditing(false);
+    }
+  }, [isOpen, mlPredictedType, initialDescription, dynamicQuestions]);
+
+  const currentTypeInfo = typeDetails[finalCaseType] || typeDetails.criminal;
+  
+  // 원본과 수정본이 다른지 체크하여 재분석 버튼 노출 여부 결정
+  const isModified = editedDescription !== initialDescription;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-[999] flex items-center justify-center p-4 backdrop-blur-sm font-sans">
+          <style jsx>{`
+            .custom-vertical-scrollbar::-webkit-scrollbar { width: 10px; }
+            .custom-vertical-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+            .custom-vertical-scrollbar::-webkit-scrollbar-thumb { background: #111; border-radius: 10px; border: 2px solid #f1f1f1; }
+          `}</style>
+
+          <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-100 flex flex-col max-h-[92vh]">
+            {/* 헤더 */}
+            <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-100"><Gavel className="w-6 h-6 text-white" /></div>
+                <h2 className="text-xl font-black text-gray-900 tracking-tighter uppercase">AI 분석 결과 검토</h2>
+              </div>
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-900"><X /></button>
+            </div>
+
+            <div className="p-8 space-y-8 overflow-y-auto custom-vertical-scrollbar relative">
+              {/* 로딩 오버레이 (재분석 중일 때만 표시) */}
+              {isReAnalyzing && (
+                <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-2xl">
+                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+                  <p className="font-black text-blue-800 tracking-widest text-sm uppercase">수정된 내용으로 재분석 중...</p>
+                </div>
+              )}
+
+              {/* 사건 유형 선택 UI */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm font-black text-gray-700 px-1 uppercase tracking-widest">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" /> 사건 유형 선택
+                </label>
+                <div className="relative">
+                  <select 
+                    value={finalCaseType} 
+                    onChange={(e) => setFinalCaseType(e.target.value as "criminal" | "civil")}
+                    className={`w-full appearance-none p-5 border-2 rounded-2xl font-black text-lg outline-none transition-all cursor-pointer ${currentTypeInfo.color} ${currentTypeInfo.textColor}`}
+                  >
+                    <option value="criminal">📄 {typeDetails.criminal.name}</option>
+                    <option value="civil">📄 {typeDetails.civil.name}</option>
+                  </select>
+                  <ChevronDown className={`absolute right-5 top-1/2 -translate-y-1/2 w-6 h-6 ${currentTypeInfo.textColor} pointer-events-none`} />
+                </div>
+                {/* 동적 설명 박스 */}
+                <div className={`p-4 border-2 rounded-xl text-sm font-bold transition-all ${currentTypeInfo.color} ${currentTypeInfo.textColor} shadow-sm`}>
+                  {currentTypeInfo.description}
+                </div>
+              </div>
+
+              {/* 사건 경위 수정 및 재분석 알림 */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <label className="text-sm font-black text-gray-800 tracking-widest flex items-center gap-2 uppercase"><FileText className="w-4 h-4 text-blue-500" /> 상세 경위 검토</label>
+                  <button onClick={() => setIsEditing(!isEditing)} className={`text-xs font-black px-4 py-1.5 rounded-xl border-2 transition-all ${isEditing ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-gray-100 text-gray-800 border-gray-200"}`}>
+                    <Edit3 className="w-3.5 h-3.5" /> {isEditing ? "완료" : "편집"}
+                  </button>
+                </div>
+                
+                {isEditing ? (
+                  <textarea value={editedDescription} onChange={(e) => setEditedDescription(e.target.value)} className="w-full border-2 border-blue-400 rounded-[2rem] p-6 h-40 outline-none bg-white font-bold text-gray-800 leading-relaxed resize-none custom-vertical-scrollbar focus:ring-4 focus:ring-blue-50" placeholder="수정할 내용을 입력하세요" />
+                ) : (
+                  <div className="w-full border-2 border-gray-100 rounded-[2rem] p-7 h-40 overflow-y-auto bg-gray-50/50 shadow-inner custom-vertical-scrollbar text-sm font-bold text-gray-700 whitespace-pre-wrap">{editedDescription}</div>
+                )}
+
+                {/* 내용이 수정되었을 때 나타나는 재분석 제안 배너 */}
+                <AnimatePresence>
+                  {isModified && !isEditing && (
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex items-center justify-between shadow-sm">
+                      <span className="text-[12px] font-black text-blue-800 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-blue-600" /> 내용이 수정되었습니다.
+                      </span>
+                      <button 
+                        onClick={() => onReAnalyze(editedDescription)}
+                        className="px-4 py-2 bg-blue-600 text-white text-[11px] uppercase tracking-widest font-black rounded-xl shadow-md flex items-center gap-1.5 active:scale-95 transition-transform"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> AI 재분석
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* AI 추가 질문 */}
+              {dynamicQuestions?.length > 0 && (
+                <div className="space-y-6 pt-4 border-t border-gray-50">
+                  <h3 className="flex items-center gap-2 text-sm font-black text-gray-800 uppercase tracking-widest font-sans"><MessageSquare className="w-4 h-4 text-blue-500" /> AI 보충 질문</h3>
+                  {dynamicQuestions.map((q, i) => (
+                    <div key={i} className="space-y-2">
+                      <label className="text-[12px] font-bold text-gray-500 px-1 italic">Q{i+1}. {q}</label>
+                      <input 
+                        type="text" 
+                        value={answers[i] || ""} 
+                        onChange={(e) => { const newAns = [...answers]; newAns[i] = e.target.value; setAnswers(newAns); }}
+                        className="w-full p-4 border-2 border-gray-100 rounded-xl outline-none focus:border-blue-400 bg-gray-50/50 font-bold text-sm" 
+                        placeholder="상세한 답변을 입력해주세요"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-8 bg-gray-50/50 flex gap-4 border-t border-gray-100 shrink-0">
+              <button onClick={onClose} className="flex-1 py-5 rounded-2xl font-black text-gray-400 hover:bg-gray-100 uppercase text-xs tracking-widest transition-colors">취소</button>
+              <button 
+                onClick={() => onFinalSubmit(answers.join(" | "), finalCaseType, editedDescription)} 
+                disabled={isSubmitting || isReAnalyzing || (dynamicQuestions?.length > 0 && answers.some(a => !a.trim()))}
+                className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black shadow-xl flex justify-center items-center gap-3 transition-all active:scale-[0.98] disabled:bg-blue-300"
+              >
+                {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+                <span className="uppercase tracking-widest text-xs font-black">시뮬레이션 시작</span>
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// --- 3. 메인 페이지 컴포넌트 ---
 export default function CaseInputPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [isAuthenticating, setIsAuthenticating] = useState(true); // 인증 확인 상태
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReAnalyzing, setIsReAnalyzing] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const [caseId, setCaseId] = useState("");
+  const [aiQuestions, setAiQuestions] = useState<string[]>([]);
+  const [mlPredictedType, setMlPredictedType] = useState<"criminal" | "civil">("criminal");
 
-  // [중요도 최상: 보안 및 세션 관리] 페이지 진입 전 인증 체크
   useEffect(() => {
-    const hasToken = document.cookie.includes("auth_token");
-    if (!hasToken) {
-      router.replace("/login");
-    } else {
-      setIsAuthenticating(false);
-      
-      // 기존 로컬스토리지 데이터 복구
-      const savedTitle = localStorage.getItem("temp_case_title");
-      const savedDesc = localStorage.getItem("temp_case_description");
-      if (savedTitle) setTitle(savedTitle);
-      if (savedDesc) setDescription(savedDesc);
-    }
+    const token = localStorage.getItem("token");
+    if (!token) router.replace("/login");
   }, [router]);
 
-  const handleTitleChange = (val: string) => {
-    setTitle(val);
-    localStorage.setItem("temp_case_title", val);
-  };
+  // 공통 분석 로직 (최초 분석 & 재분석)
+  const processAnalysis = async (descToAnalyze: string) => {
+    try {
+      const isCivilHint = ["계약", "금전", "빌려준", "부동산", "손해배상"].some(k => descToAnalyze.includes(k));
+      setMlPredictedType(isCivilHint ? "civil" : "criminal");
 
-  const handleDescChange = (val: string) => {
-    setDescription(val);
-    localStorage.setItem("temp_case_description", val);
-  };
+      const response = await apiClient.post("/api/cases/input", {
+        case_description: descToAnalyze
+      });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const { case_id, questions } = response.data;
+
+      if (case_id) {
+        setCaseId(case_id);
+        setAiQuestions(questions || []);
+
+        if (!questions || questions.length === 0) {
+          router.push(`/simulation/${case_id}`);
+        } else {
+          setIsModalOpen(true);
+        }
+      }
+    } catch (error: any) {
+      alert("데이터 분석 요청 중 오류가 발생했습니다.");
     }
   };
 
-  const handleStartSimulation = () => {
-    if (!title || !description) {
-      alert("사건 제목과 내용을 모두 입력해주세요.");
+  // 1단계: 초기 데이터 분석
+  const handleInitialProcess = async () => {
+    if (!title || description.trim().length < 20) {
+      alert("제목과 사건 내용(최소 20자 이상)을 정확히 입력해주세요.");
       return;
     }
-    // 시뮬레이션 시작 시 로컬스토리지 정리 후 이동
-    localStorage.removeItem("temp_case_title");
-    localStorage.removeItem("temp_case_description");
-    router.push("/simulation"); // 시뮬레이션 상세 페이지로 이동
+    setIsSubmitting(true);
+    await processAnalysis(description);
+    setIsSubmitting(false);
   };
 
-  // 인증 확인 중일 때는 아무것도 보여주지 않음 (깜빡임 방지)
-  if (isAuthenticating) return null;
+  // 1.5단계: 모달 내에서 경위 수정 후 재분석 요청
+  const handleReAnalyze = async (newDescription: string) => {
+    setIsReAnalyzing(true);
+    await processAnalysis(newDescription);
+    setDescription(newDescription); // 재분석 완료 시 부모 상태(원본)도 업데이트
+    setIsReAnalyzing(false);
+  };
+
+  // 2단계: 최종 데이터 전송 (시뮬레이션 돌입)
+  const handleFinalSubmit = async (answers: string, type: string, finalDesc: string) => {
+    setIsSubmitting(true);
+    try {
+      await apiClient.post("/api/cases/input_plus", {
+        case_id: caseId,
+        case_description: finalDesc,
+        additional_info: answers,
+        case_type: type === 'criminal' ? '형사' : '민사'
+      });
+      router.push(`/simulation/${caseId}`);
+    } catch (error) {
+      alert("최종 분석 데이터 전송에 실패했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-8 animate-in fade-in duration-500">
-      <header className="space-y-3">
-        <div className="flex items-center gap-2 text-blue-600">
-          <Gavel className="w-6 h-6" />
-          <span className="font-bold tracking-tight">AI 재판 시뮬레이터</span>
-        </div>
-        <h1 className="text-3xl font-bold text-gray-900">사건 분석 입력</h1>
-        <p className="text-sm text-gray-500 font-medium">정보를 입력하고 증거 자료를 업로드하여 시뮬레이션을 시작하세요.</p>
+    <div className="max-w-2xl mx-auto p-6 space-y-8 animate-in fade-in duration-500 pb-20 font-sans">
+      <header className="flex flex-col items-start gap-2 text-blue-600 font-bold">
+        <div className="flex items-center gap-2"><Gavel className="w-6 h-6" /><span className="uppercase tracking-tight">AI 재판 시뮬레이터</span></div>
+        <h1 className="text-3xl font-black text-gray-900 tracking-tighter">사건 분석 입력</h1>
       </header>
 
-      <section className="space-y-6 bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl shadow-gray-50">
-        {/* 사건 제목 섹션 */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-bold mb-3 text-gray-700">
-            <CheckCircle2 className="w-4 h-4 text-blue-500" />
-            사건 제목
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            className="w-full border border-gray-200 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-all"
-            placeholder="사건 제목을 입력하세요."
-          />
+      <section className="space-y-6 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-2xl">
+        <div className="space-y-3">
+          <label className="text-sm font-black text-gray-700 uppercase tracking-widest px-1 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-blue-500" /> 사건 제목</label>
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full border-2 border-gray-50 rounded-2xl p-4 font-bold outline-none focus:border-blue-500 bg-gray-50/50" placeholder="제목을 입력하세요" />
         </div>
 
-        {/* 사건 상세 섹션 */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-bold mb-3 text-gray-700">
-            <FileText className="w-4 h-4 text-blue-500" />
-            사건 상세 경위
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => handleDescChange(e.target.value)}
-            className="w-full border border-gray-200 rounded-2xl p-5 h-56 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-all resize-none"
-            placeholder="상세 내용을 적어주세요."
-          />
+        <div className="space-y-3">
+          <label className="text-sm font-black text-gray-700 uppercase tracking-widest px-1 flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" /> 상세 경위</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border-2 border-gray-50 rounded-2xl p-6 h-64 font-bold outline-none focus:border-blue-500 bg-gray-50/50 resize-none overflow-y-auto custom-vertical-scrollbar" placeholder="상세 내용을 입력하세요 (20자 이상)" />
         </div>
 
-        {/* 증거 자료 업로드 섹션 */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-bold mb-3 text-gray-700">
-            <Upload className="w-4 h-4 text-blue-500" />
-            증거 자료 업로드
-          </label>
-          <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="group border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all relative overflow-hidden"
-          >
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden" 
-              accept=".pdf,image/*"
-            />
-            
-            <AnimatePresence mode="wait">
-              {file ? (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="flex flex-col items-center gap-2"
-                >
-                  <div className="p-3 bg-blue-100 rounded-xl text-blue-600">
-                    <FileText className="w-8 h-8" />
-                  </div>
-                  <div className="text-sm text-gray-900 font-bold truncate max-w-[250px]">
-                    {file.name}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {(file.size / 1024 / 1024).toFixed(2)}MB • 업로드 준비됨
-                  </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setFile(null); }}
-                    className="mt-2 text-xs text-red-500 hover:text-red-700 font-bold underline underline-offset-4"
-                  >
-                    파일 취소
-                  </button>
-                </motion.div>
-              ) : (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="space-y-2"
-                >
-                  <div className="flex justify-center">
-                    <Upload className="w-10 h-10 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                  </div>
-                  <p className="text-gray-500 text-sm font-medium">클릭하거나 파일을 여기로 드래그하세요.</p>
-                  <p className="text-xs text-gray-400">PDF, 이미지 파일 (최대 10MB)</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+        <div className="space-y-3">
+          <label className="text-sm font-black text-gray-700 uppercase tracking-widest px-1 flex items-center gap-2"><Upload className="w-4 h-4 text-blue-500" /> 증거 업로드</label>
+          <div onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-[2rem] p-10 text-center cursor-pointer transition-all ${file ? 'border-blue-500 bg-blue-50' : 'border-gray-100 bg-gray-50/50'}`}>
+            <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && setFile(e.target.files[0])} className="hidden" />
+            <p className="text-gray-500 font-bold text-sm">{file ? file.name : "클릭하여 파일 업로드"}</p>
           </div>
         </div>
 
-        <button 
-          onClick={handleStartSimulation}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-bold shadow-lg shadow-blue-100 transition-all active:scale-[0.98] flex justify-center items-center gap-2"
-        >
-          시뮬레이션 시작하기
+        <button onClick={handleInitialProcess} disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-[1.5rem] font-black shadow-xl flex justify-center items-center gap-3 transition-all active:scale-[0.98] disabled:bg-blue-300">
+          {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
+          데이터 분석 시작
         </button>
       </section>
+
+      <CaseConfirmModal
+        isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
+        onFinalSubmit={handleFinalSubmit} isSubmitting={isSubmitting}
+        onReAnalyze={handleReAnalyze} isReAnalyzing={isReAnalyzing}
+        initialDescription={description} mlPredictedType={mlPredictedType}
+        dynamicQuestions={aiQuestions}
+      />
     </div>
   );
 }
