@@ -18,7 +18,7 @@ export default function SimulationDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
 
-  // 🛡️ API 데이터 가져오기
+  //  API 데이터 가져오기
   useEffect(() => {
     const fetchReport = async () => {
       const token = localStorage.getItem("token");
@@ -49,7 +49,7 @@ export default function SimulationDashboard() {
     if (caseId) fetchReport();
   }, [caseId, router]);
 
-  // 📥 PDF 다운로드(인쇄) 핸들러
+  // PDF 다운로드(인쇄) 핸들러
   const handleDownloadPDF = () => {
     window.print();
   };
