@@ -125,7 +125,6 @@ function CaseConfirmModal({
   );
 }
 
-// --- 3. 메인 사건 입력 페이지 ---
 export default function CaseInputPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -133,7 +132,7 @@ export default function CaseInputPage() {
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isReAnalyzing, setIsReAnalyzing] = useState(false); // 추가됨
+  const [isReAnalyzing, setIsReAnalyzing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [caseId, setCaseId] = useState("");
   const [aiQuestions, setAiQuestions] = useState<string[]>([]);
@@ -144,13 +143,12 @@ export default function CaseInputPage() {
     if (!token) router.replace("/login");
   }, [router]);
 
-  // 첫 번째 단계: 분석 및 질문 생성 요청
+  // 1단계 분석 및 질문 생성 요청
   const handleInitialProcess = async () => {
     if (!title || description.trim().length < 20) {
       alert("제목과 최소 20자 이상의 사건 설명을 입력해 주세요.");
       return;
     }
-
     setIsSubmitting(true);
     try {
       const formData = new FormData();
@@ -165,13 +163,8 @@ export default function CaseInputPage() {
       const { case_id, questions, predicted_type } = response.data;
       setCaseId(case_id);
       setAiQuestions(questions || []);
-      setMlPredictedType(predicted_type || (["계약", "금전", "빌린"].some(k => description.includes(k)) ? "civil" : "criminal"));
-      
-      if (!questions || questions.length === 0) {
-        await handleFinalSubmit("", mlPredictedType, description, case_id);
-      } else {
-        setIsModalOpen(true);
-      }
+      setMlPredictedType(predicted_type || (description.includes("계약") ? "civil" : "criminal"));
+      setIsModalOpen(true);
     } catch (error: any) {
       alert(error.response?.data?.message || "분석 서버 연결에 실패했습니다.");
     } finally {
@@ -179,7 +172,6 @@ export default function CaseInputPage() {
     }
   };
 
-  // 설명 수정 시 재분석 로직 (추가됨)
   const handleReAnalyze = async (newDesc: string) => {
     setIsReAnalyzing(true);
     setDescription(newDesc);
@@ -187,15 +179,8 @@ export default function CaseInputPage() {
       const formData = new FormData();
       formData.append("title", title);
       formData.append("case_description", newDesc);
-      if (file) formData.append("files", file);
-
-      const response = await apiClient.post("/api/cases/input", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-
-      const { questions, predicted_type } = response.data;
-      setAiQuestions(questions || []);
-      setMlPredictedType(predicted_type || "criminal");
+      const response = await apiClient.post("/api/cases/input", formData);
+      setAiQuestions(response.data.questions || []);
     } catch (error) {
       alert("내용 수정 중 분석 오류가 발생했습니다.");
     } finally {
@@ -203,19 +188,19 @@ export default function CaseInputPage() {
     }
   };
 
-  // 두 번째 단계: 백엔드 전송
-  const handleFinalSubmit = async (answers: string, type: string, finalDesc: string, targetCaseId?: string) => {
-    const currentCaseId = targetCaseId || caseId;
+  // 🚀 최종 제출 및 시뮬레이션 시작 연동 로직
+  const handleFinalSubmit = async (answers: string, type: string, finalDesc: string) => {
     setIsSubmitting(true);
     try {
-      const payload = {
-        case_id: currentCaseId,
+      // [1] input_plus 데이터 저장
+      const plusPayload = {
+        case_id: String(caseId),
         description: finalDesc,
         created_at: new Date().toISOString().split('T')[0],
         additional_info: answers,
         analysis: {
           case_type: type === 'criminal' ? '형사' : '민사',
-          main_action: type === 'criminal' ? "형사처벌 대상 행위" : "민사 분쟁 사항",
+          main_action: title,
           victim_exist: true,
           injury_level: "분석 중",
           evidence: [
@@ -224,11 +209,27 @@ export default function CaseInputPage() {
           ]
         }
       };
+      await apiClient.post("/api/cases/input_plus", plusPayload);
 
-      await apiClient.post("/api/cases/input_plus", payload);
-      router.push(`/simulation/start`);
-    } catch (error) {
-      alert("데이터 저장 중 오류가 발생했습니다.");
+      // [2] 🚀 시뮬레이션 시작 트리거 (422 방지 정적 데이터 구조)
+      const startPayload = {
+        case_id: String(caseId),
+        case_type: type === 'criminal' ? '형사' : '민사',
+        start_from_round: 1
+      };
+      
+      await apiClient.post("/api/simulation/start", startPayload);
+
+      // [3] 페이지 이동
+      router.push(`/simulation/${caseId}`);
+
+    } catch (error: any) {
+      if (error.response?.status === 422) {
+        console.error("❌ 422 상세 원인:", error.response.data.detail);
+        alert("서버 데이터 형식이 맞지 않습니다.");
+      } else {
+        alert("데이터 저장 중 오류가 발생했습니다.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -276,14 +277,10 @@ export default function CaseInputPage() {
       </div>
 
       <CaseConfirmModal
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)}
-        onFinalSubmit={handleFinalSubmit} 
-        isSubmitting={isSubmitting}
-        onReAnalyze={handleReAnalyze} 
-        isReAnalyzing={isReAnalyzing}
-        initialDescription={description} 
-        mlPredictedType={mlPredictedType}
+        isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
+        onFinalSubmit={handleFinalSubmit} isSubmitting={isSubmitting}
+        onReAnalyze={handleReAnalyze} isReAnalyzing={isReAnalyzing}
+        initialDescription={description} mlPredictedType={mlPredictedType}
         dynamicQuestions={aiQuestions}
       />
     </div>
