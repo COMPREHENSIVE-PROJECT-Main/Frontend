@@ -67,7 +67,7 @@ export default function SimulationPage() {
 
     const startSimulation = async () => {
       try {
-        const response = await fetch("http://localhost:8080/api/simulation/start", {
+        const response = await fetch("api/simulation/start", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -166,7 +166,7 @@ export default function SimulationPage() {
             <Activity className={`text-white w-6 h-6 ${!isFinished && !errorStatus ? 'animate-pulse' : ''}`} />
           </div>
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none italic">JUSTICE ENGINE</h1>
+            <h1 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none italic"></h1>
             {caseInfo && (
               <div className="flex items-center gap-3 mt-1.5">
                 <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded uppercase">{caseInfo.case_type}</span>
