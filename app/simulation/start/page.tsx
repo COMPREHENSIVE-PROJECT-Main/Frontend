@@ -16,7 +16,7 @@ function TrialStepper({ currentStep }: { currentStep: number }) {
     { title: "판결 선고", icon: "⚖️" },
   ];
   return (
-    <div className="w-full py-8 bg-white/80 backdrop-blur-md sticky top-0 z-20 shadow-sm border-none">
+    <div className="w-full py-8 bg-white/80 backdrop-blur-md sticky top-0 z-20 shadow-sm border-none font-sans">
       <div className="max-w-md mx-auto px-6">
         <div className="relative flex justify-between">
           <div className="absolute top-5 left-0 w-full h-1 bg-slate-50 -z-0 rounded-full">
@@ -51,32 +51,46 @@ export default function SimulationPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [caseInfo, setCaseInfo] = useState<any>(null);
   const [currentStep, setCurrentStep] = useState(0);
-  const [currentEvent, setCurrentEvent] = useState("연결 준비 중");
+  const [currentEvent, setCurrentEvent] = useState("서버 연결 중...");
   const [isFinished, setIsFinished] = useState(false);
   const [errorStatus, setErrorStatus] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 자동 스크롤
+  // 📝 자동 스크롤 로직
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [logs]);
 
-  // 🔗 SSE 스트리밍 연결 로직
+  // 🔗 SSE 스트리밍 연결 및 자동 시작 로직
   useEffect(() => {
     if (!caseId) return;
 
-    const startSimulation = async () => {
+    const startSimulationStream = async () => {
       try {
-        const response = await fetch("api/simulation/start", {
+        const token = localStorage.getItem("token");
+        
+        const response = await fetch("http://localhost:8080/api/simulation/start", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": "user_id", 
+            "Authorization": `Bearer ${token}`, 
           },
-          body: JSON.stringify({ case_id: caseId }),
+          body: JSON.stringify({ 
+            case_id: caseId,
+            case_type: "형사", 
+            start_from_round: 1 
+          }),
         });
 
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || "시뮬레이션 시작에 실패했습니다.");
+        }
+
         if (!response.body) return;
+
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
@@ -85,73 +99,88 @@ export default function SimulationPage() {
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-
           const lines = chunk.split("\n");
           
           for (const line of lines) {
             if (!line.trim() || !line.startsWith("data:")) continue;
             
             const jsonStr = line.replace("data:", "").trim();
-            const payload = JSON.parse(jsonStr);
-            const { event, data } = payload;
+            try {
+              const payload = JSON.parse(jsonStr);
+              const { event, data } = payload;
 
-            setCurrentEvent(event);
+              // 이벤트명 한글 변환 맵핑
+              const eventMap: { [key: string]: string } = {
+                "simulation_start": "시뮬레이션 시작",
+                "round_start": "공방 진행 중",
+                "token": "데이터 수신 중",
+                "round_end": "공방 일시 정지",
+                "judge_decision": "판사 판단 중",
+                "final_verdict": "판결 선고 중",
+                "simulation_end": "시뮬레이션 종료",
+                "error": "오류 발생"
+              };
 
-            switch (event) {
-              case "simulation_start":
-                setCaseInfo(data);
-                setCurrentStep(0);
-                break;
+              setCurrentEvent(eventMap[event] || event);
 
-              case "round_start":
-                setCurrentStep(data.round >= 2 ? 2 : 1);
-                setLogs(prev => [...prev, { ...data, type: 'argument', msg: "", isStreaming: true }]);
-                break;
+              switch (event) {
+                case "simulation_start":
+                  setCaseInfo(data);
+                  setCurrentStep(0);
+                  break;
 
-              case "token":
-                setLogs(prev => {
-                  const last = prev[prev.length - 1];
-                  if (last && last.type === 'argument') {
-                    const updated = { ...last, msg: last.msg + data.text };
-                    return [...prev.slice(0, -1), updated];
-                  }
-                  return prev;
-                });
-                break;
+                case "round_start":
+                  setCurrentStep(data.round >= 2 ? 2 : 1);
+                  setLogs(prev => [...prev, { ...data, type: 'argument', msg: "", isStreaming: true }]);
+                  break;
 
-              case "round_end":
-                setLogs(prev => {
-                  const last = prev[prev.length - 1];
-                  return [...prev.slice(0, -1), { ...last, ...data, msg: data.argument, isStreaming: false }];
-                });
-                break;
+                case "token":
+                  setLogs(prev => {
+                    const last = prev[prev.length - 1];
+                    if (last && last.type === 'argument') {
+                      const updated = { ...last, msg: last.msg + data.text };
+                      return [...prev.slice(0, -1), updated];
+                    }
+                    return prev;
+                  });
+                  break;
 
-              case "judge_decision":
-                setLogs(prev => [...prev, { ...data, type: 'decision' }]);
-                break;
+                case "round_end":
+                  setLogs(prev => {
+                    const last = prev[prev.length - 1];
+                    return [...prev.slice(0, -1), { ...last, ...data, msg: data.argument, isStreaming: false }];
+                  });
+                  break;
 
-              case "final_verdict":
-                setCurrentStep(3);
-                setLogs(prev => [...prev, { ...data, type: 'verdict', msg: data.order }]);
-                break;
+                case "judge_decision":
+                  setLogs(prev => [...prev, { ...data, type: 'decision' }]);
+                  break;
 
-              case "error":
-                setErrorStatus(data);
-                break;
+                case "final_verdict":
+                  setCurrentStep(3);
+                  setLogs(prev => [...prev, { ...data, type: 'verdict', msg: data.order }]);
+                  break;
 
-              case "simulation_end":
-                setIsFinished(true);
-                break;
+                case "error":
+                  setErrorStatus(data);
+                  break;
+
+                case "simulation_end":
+                  setIsFinished(true);
+                  return;
+              }
+            } catch (e) {
+              console.error("데이터 파싱 에러:", e);
             }
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("연결 오류:", err);
-        setErrorStatus({ code: "CONN_FAIL", message: "서버와의 연결에 실패했습니다." });
+        setErrorStatus({ code: "연결 실패", message: err.message });
       }
     };
 
-    startSimulation();
+    startSimulationStream();
   }, [caseId]);
 
   return (
@@ -166,17 +195,14 @@ export default function SimulationPage() {
             <Activity className={`text-white w-6 h-6 ${!isFinished && !errorStatus ? 'animate-pulse' : ''}`} />
           </div>
           <div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tighter uppercase leading-none italic"></h1>
-            {caseInfo && (
-              <div className="flex items-center gap-3 mt-1.5">
-                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded uppercase">{caseInfo.case_type}</span>
-                <span className="text-slate-400 font-bold text-[9px] uppercase tracking-widest opacity-60">ID: {caseId}</span>
-              </div>
-            )}
+            <h2 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">AI 실시간 법정</h2>
+            <h1 className="text-xl font-black text-slate-900 tracking-tighter uppercase leading-none">
+              {isFinished ? "시뮬레이션 종료" : "실시간 법리 공방"}
+            </h1>
           </div>
         </div>
-        <div className="text-[10px] font-black text-blue-600 bg-white px-4 py-2 rounded-xl shadow-md tracking-widest uppercase">
-          {currentEvent.replace('_', ' ')}
+        <div className="text-[10px] font-black text-blue-600 bg-white px-5 py-2.5 rounded-xl shadow-md tracking-[0.2em] uppercase border border-blue-50">
+          {currentEvent}
         </div>
       </header>
 
@@ -184,41 +210,44 @@ export default function SimulationPage() {
         <AnimatePresence>
           {logs.length === 0 && !errorStatus && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col items-center justify-center space-y-4 opacity-30">
-              <Loader2 className="w-10 h-10 animate-spin text-slate-900" />
-              <p className="text-[10px] font-black tracking-[0.4em] uppercase italic">시뮬레이션 시작 중</p>
+              <Loader2 className="w-12 h-12 animate-spin text-slate-900" />
+              <p className="text-[10px] font-black tracking-[0.4em] uppercase italic text-slate-500">AI 엔진 최적화 및 연결 중...</p>
             </motion.div>
           )}
 
           {logs.map((log, index) => (
-            <motion.div key={index} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className={`flex ${log.type === 'verdict' || log.type === 'decision' ? 'justify-center' : 'justify-start'}`}>
-              <div className={`max-w-[80%] p-10 rounded-[3rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.05)] border-none ${
+            <motion.div key={index} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className={`flex ${log.type === 'verdict' || log.type === 'decision' ? 'justify-center' : 'justify-start'}`}>
+              <div className={`max-w-[80%] p-10 rounded-[3.5rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.05)] border-none ${
                 log.type === 'verdict' ? 'bg-slate-900 text-white ring-[15px] ring-blue-500/5' : 
                 log.type === 'decision' ? 'bg-blue-50 text-blue-800 ring-4 ring-blue-100' :
                 'bg-white text-slate-800'
               }`}>
                 <div className="flex justify-between items-center mb-6">
-                  <span className={`text-[10px] font-black uppercase tracking-[0.3em] ${log.type === 'verdict' ? 'text-blue-400' : 'text-blue-600'}`}>
-                    {log.type === 'verdict' ? "최종 판결" : log.type === 'decision' ? "판사 개입" : log.speaker}
-                  </span>
-                  {log.round && <span className="text-[9px] font-black text-slate-300 uppercase">ROUND {log.round}</span>}
+                  <div className="flex items-center gap-2">
+                    {log.type === 'decision' && <ShieldCheck className="w-4 h-4 text-blue-600" />}
+                    <span className={`text-[10px] font-black uppercase tracking-[0.3em] ${log.type === 'verdict' ? 'text-blue-400' : 'text-blue-600'}`}>
+                      {log.type === 'verdict' ? "최종 판결 요지" : log.type === 'decision' ? "판사 개입 및 판단" : log.speaker}
+                    </span>
+                  </div>
+                  {log.round && <span className="text-[9px] font-black text-slate-300 uppercase">제 {log.round}차 공방</span>}
                 </div>
                 
                 {(log.decision || log.value) && (
                   <div className="mb-6 flex gap-3">
-                    <span className="px-4 py-1.5 bg-blue-600 text-white text-[10px] font-black rounded-xl">{log.decision}</span>
-                    <span className="px-4 py-1.5 bg-slate-800 text-blue-300 text-[10px] font-black rounded-xl">{log.value}</span>
+                    <span className={`px-4 py-1.5 text-[10px] font-black rounded-xl ${log.type === 'verdict' ? 'bg-blue-600 text-white' : 'bg-white text-blue-700 shadow-sm'}`}>{log.decision}</span>
+                    <span className={`px-4 py-1.5 text-[10px] font-black rounded-xl ${log.type === 'verdict' ? 'bg-slate-800 text-blue-300' : 'bg-blue-100 text-blue-800'}`}>{log.value}</span>
                   </div>
                 )}
 
-                <p className="text-[17px] leading-[1.8] font-bold whitespace-pre-wrap tracking-tight">
+                <p className="text-[17px] leading-[1.9] font-bold whitespace-pre-wrap tracking-tight">
                   {log.msg}
-                  {log.isStreaming && <span className="inline-block w-2 h-5 ml-2 bg-blue-600 animate-bounce align-middle" />}
+                  {log.isStreaming && <span className="inline-block w-1.5 h-5 ml-2 bg-blue-600 animate-pulse align-middle" />}
                 </p>
 
                 {log.rationale && (
-                  <div className={`mt-6 p-6 rounded-2xl text-sm ${log.type === 'verdict' ? 'bg-white/5 text-slate-400' : 'bg-white/50 text-blue-900/60'}`}>
-                    <span className="block text-[10px] font-black uppercase mb-2 opacity-50">판단 근거</span>
-                    {log.rationale}
+                  <div className={`mt-8 p-7 rounded-[2rem] text-sm ${log.type === 'verdict' ? 'bg-white/5 text-slate-400' : 'bg-white/50 text-blue-900/60'}`}>
+                    <span className="block text-[10px] font-black uppercase mb-3 opacity-50 tracking-widest">판단 근거</span>
+                    <p className="leading-relaxed">{log.rationale}</p>
                   </div>
                 )}
               </div>
@@ -227,12 +256,14 @@ export default function SimulationPage() {
 
           {errorStatus && (
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex justify-center p-10">
-              <div className="bg-red-50 p-10 rounded-[3rem] text-center max-w-md shadow-xl">
-                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <h3 className="text-red-900 font-black uppercase text-xl mb-2">프로세스 오류</h3>
-                <p className="text-red-600/70 text-sm font-bold mb-6 italic">[{errorStatus.code}] {errorStatus.message}</p>
-                <button onClick={() => window.location.reload()} className="bg-red-500 text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center gap-3 mx-auto">
-                  <RefreshCcw size={16}/> 재시도 하기
+              <div className="bg-red-50 p-12 rounded-[3.5rem] text-center max-w-md shadow-xl border border-red-100">
+                <AlertCircle className="w-14 h-14 text-red-500 mx-auto mb-5" />
+                <h3 className="text-red-900 font-black uppercase text-xl mb-2 tracking-tighter">분석 시스템 오류</h3>
+                <p className="text-red-600/70 text-sm font-bold mb-8 italic leading-relaxed">
+                  {errorStatus.message || "시뮬레이션 중 알 수 없는 오류가 발생했습니다."}
+                </p>
+                <button onClick={() => window.location.reload()} className="bg-red-600 text-white px-10 py-4 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-95">
+                  <RefreshCcw size={16} className="inline mr-2" /> 시뮬레이션 다시 시도
                 </button>
               </div>
             </motion.div>
@@ -240,16 +271,21 @@ export default function SimulationPage() {
         </AnimatePresence>
       </main>
 
-      <footer className="p-10 bg-white/80 backdrop-blur-md z-10 shadow-[0_-20px_40px_rgba(0,0,0,0.02)]">
+      <footer className="p-10 bg-white/80 backdrop-blur-md z-10 shadow-[0_-20px_40px_rgba(0,0,0,0.02)] border-t border-slate-50">
         <div className="max-w-4xl mx-auto flex justify-center items-center">
           {isFinished ? (
-            <motion.button initial={{ y: 20 }} animate={{ y: 0 }} onClick={() => router.push(`/simulation/dashboard/${caseId}`)} className="px-12 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-[12px] uppercase tracking-[0.3em] shadow-2xl">
-              결과 리포트 확인하기 <ArrowRight className="inline ml-2" />
+            <motion.button 
+              initial={{ scale: 0.9, y: 20 }} 
+              animate={{ scale: 1, y: 0 }} 
+              onClick={() => router.push(`/simulation/report/${caseId}`)} 
+              className="px-14 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-[12px] uppercase tracking-[0.4em] shadow-2xl hover:bg-blue-600 transition-all flex items-center gap-4 group"
+            >
+              종합 분석 리포트 확인 <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />
             </motion.button>
           ) : (
-            <div className="flex items-center gap-4">
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-ping" />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">데이터 실시간 수신 중</span>
+            <div className="flex items-center gap-5">
+              <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-ping" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] italic">AI 법률 알고리즘 연산 중...</span>
             </div>
           )}
         </div>
