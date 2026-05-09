@@ -245,7 +245,7 @@ export default function CaseInputPage() {
             <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl animate-pulse"><Activity className="text-white w-9 h-9" /></div>
             <div>
               <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">AI 재판 시뮬레이션</h1>
-              <p className="text-slate-500 font-bold text-sm italic">Backend Schema Synchronized</p>
+              <p className="text-slate-500 font-bold text-sm italic">사건을 입력하면 ai가 자동으로 분석하여 시뮬레이션을 제공합니다.</p>
             </div>
           </div>
         </header>
