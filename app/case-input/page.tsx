@@ -139,7 +139,7 @@ export default function CaseInputPage() {
   const [mlPredictedType, setMlPredictedType] = useState<"criminal" | "civil">("criminal");
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("accessToken");
     if (!token) router.replace("/login");
   }, [router]);
 
