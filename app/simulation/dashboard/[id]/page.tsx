@@ -18,7 +18,7 @@ export default function SimulationDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
 
-  //  API 데이터 가져오기
+  // API 데이터 가져오기
   useEffect(() => {
     const fetchReport = async () => {
       const token = localStorage.getItem("token");
@@ -49,10 +49,7 @@ export default function SimulationDashboard() {
     if (caseId) fetchReport();
   }, [caseId, router]);
 
-  // PDF 다운로드(인쇄) 핸들러
-  const handleDownloadPDF = () => {
-    window.print();
-  };
+
 
   if (loading) {
     return (
@@ -74,7 +71,7 @@ export default function SimulationDashboard() {
   }
 
   const r = data.report;
-  const isCriminal = r.case_info.case_type === "형사";
+  const isCriminal = r.case_info.case_type ? "형사" : "민사";
   const theme = {
     bg: isCriminal ? "bg-blue-600" : "bg-emerald-600",
     color: isCriminal ? "text-blue-600" : "text-emerald-600",
@@ -88,15 +85,26 @@ export default function SimulationDashboard() {
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 py-4">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <button onClick={() => router.push('/user')} className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all">
-            <ArrowLeft size={14} /> 기록 목록으로 돌아가기
+            <ArrowLeft size={14} /> 기록 목록
           </button>
-          {/* 📥 기능 통합: 인쇄 기능을 다운로드 버튼으로 이동 */}
-          <button 
-            onClick={handleDownloadPDF}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg"
-          >
-            <Download size={14} /> PDF 리포트 다운로드
-          </button>
+          
+          <div className="flex items-center gap-3">
+            {/* 법률 자문 페이지 이동 버튼 */}
+            <button 
+              onClick={() => router.push('/advice')}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 transition-all shadow-sm active:scale-95"
+            >
+              <MessageSquare size={14} className="text-blue-600" /> AI 법률 자문
+            </button>
+
+            {/* PDF 다운로드 버튼 */}
+            <button 
+              onClick={handleDownloadPDF}
+              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg active:scale-95"
+            >
+              <Download size={14} /> PDF 리포트
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -135,7 +143,7 @@ export default function SimulationDashboard() {
           </div>
         </section>
 
-        {/* 4. 판결문 전문 - 인쇄 버튼 제거됨 */}
+        {/* 4. 판결문 전문 */}
         <section className="bg-slate-50 border border-slate-100 rounded-[3.5rem] p-12 space-y-8">
           <div className="flex items-center justify-between border-b border-slate-200 pb-6">
             <h3 className="text-sm font-black uppercase tracking-[0.3em] flex items-center gap-3 text-slate-400">
