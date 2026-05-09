@@ -139,7 +139,7 @@ export default function CaseInputPage() {
   const [mlPredictedType, setMlPredictedType] = useState<"criminal" | "civil">("criminal");
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("accessToken");
     if (!token) router.replace("/login");
   }, [router]);
 
@@ -211,17 +211,9 @@ export default function CaseInputPage() {
       };
       await apiClient.post("/api/cases/input_plus", plusPayload);
 
-      // [2] 🚀 시뮬레이션 시작 트리거 (422 방지 정적 데이터 구조)
-      const startPayload = {
-        case_id: String(caseId),
-        case_type: type === 'criminal' ? '형사' : '민사',
-        start_from_round: 1
-      };
-      
-      await apiClient.post("/api/simulation/start", startPayload);
-
-      // [3] 페이지 이동
-      router.push(`/simulation/${caseId}`);
+      // [2] 페이지 이동 후 시뮬레이션 페이지에서 SSE 스트림을 직접 시작
+      const caseType = type === 'criminal' ? '형사' : '민사';
+      router.push(`/simulation/${caseId}?case_type=${encodeURIComponent(caseType)}`);
 
     } catch (error: any) {
       if (error.response?.status === 422) {

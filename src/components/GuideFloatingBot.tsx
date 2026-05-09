@@ -5,6 +5,66 @@ import { HelpCircle, X, Send, MessageCircle, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import apiClient from "../lib/api-client"; //axios 인스턴스 
 
+function formatGuideText(content: string) {
+  return content
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/#{1,6}\s*/g, "")
+    .replace(/[•·]\s*/g, "- ")
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^[-–—_=\s]{2,}$/.test(line))
+    .join("\n")
+    .trim();
+}
+
+function GuideMessage({ content }: { content: string }) {
+  const blocks = formatGuideText(content).split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, blockIdx) => {
+        const lines = block.split(/\n/).map((line) => line.trim()).filter(Boolean);
+        const firstLine = lines[0] || "";
+        const restLines = lines.slice(1);
+        const isHeading = restLines.length > 0 && firstLine.length <= 24 && !/^[-\d]/.test(firstLine);
+        const bodyLines = isHeading ? restLines : lines;
+
+        return (
+          <section key={blockIdx} className={blockIdx > 0 ? "border-t border-slate-100 pt-3" : ""}>
+            {isHeading && (
+              <h4 className="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-600">
+                {firstLine.replace(/^\[|\]$/g, "")}
+              </h4>
+            )}
+            <div className="space-y-2">
+              {bodyLines.map((line, lineIdx) => {
+                const cleaned = line.replace(/^[-*]\s*/, "").replace(/^\d+[.)]\s*/, "");
+                const hasListMarker = /^[-*]\s*/.test(line) || /^\d+[.)]\s*/.test(line);
+                const isShortLabel = cleaned.length <= 16 && !/[.?!。]$/.test(cleaned);
+
+                if (hasListMarker && !isShortLabel) {
+                  return (
+                    <div key={lineIdx} className="flex gap-2 text-[13px] leading-6 text-slate-700">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <p>{cleaned}</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <p key={lineIdx} className="text-[13px] leading-6 text-slate-700">
+                    {cleaned}
+                  </p>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function GuideFloatingBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -45,7 +105,7 @@ export default function GuideFloatingBot() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[9999]">
+    <div className="guide-floating-bot fixed bottom-6 right-6 z-[9999] print:hidden">
       <AnimatePresence>
         {!isOpen ? (
           <motion.button
@@ -87,7 +147,7 @@ export default function GuideFloatingBot() {
                     ? "bg-blue-600 text-white rounded-tr-none" 
                     : "bg-white text-slate-700 border border-slate-100 rounded-tl-none"
                   }`}>
-                    {msg.content}
+                    {msg.role === "bot" ? <GuideMessage content={msg.content} /> : msg.content}
                   </div>
                 </div>
               ))}

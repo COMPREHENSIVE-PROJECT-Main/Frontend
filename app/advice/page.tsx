@@ -6,28 +6,163 @@ import { Gavel, Send, ShieldCheck, User, Loader2, ArrowLeft } from "lucide-react
 import { motion, AnimatePresence } from "framer-motion";
 import apiClient from "../../src/lib/api-client";
 
+const LEGAL_SESSION_STORAGE_KEY = "legalAdviceSessionId";
+const WELCOME_MESSAGE = "안녕하세요, 전략 법률 고문 AI입니다. 새로운 상담 세션이 시작되었습니다. 도움을 드릴까요?";
+
+type AdviceMessage = {
+  role: "user" | "bot";
+  content: string;
+};
+
+function formatLegalAdvice(content: string) {
+  return content
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/#{1,6}\s*/g, "")
+    .replace(/[•·]\s*/g, "- ")
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^[-–—_=\s]{2,}$/.test(line))
+    .join("\n")
+    .trim();
+}
+
+function LegalAdviceBubble({ content }: { content: string }) {
+  const normalized = formatLegalAdvice(content);
+  const blocks = normalized.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, blockIdx) => {
+        const lines = block
+          .split(/\n/)
+          .map((line) => line.trim())
+          .filter((line) => line && !/^[-–—_=\s]{2,}$/.test(line));
+        const firstLine = lines[0] || "";
+        const restLines = lines.slice(1);
+        const isHeading = restLines.length > 0 && firstLine.length <= 28 && !/^[-\d]/.test(firstLine);
+        const bodyLines = isHeading ? restLines : lines;
+
+        return (
+          <section key={blockIdx} className={blockIdx > 0 ? "border-t border-slate-100 pt-4" : ""}>
+            {isHeading && (
+              <h3 className="mb-3 text-[12px] font-black uppercase tracking-widest text-blue-600">
+                {firstLine.replace(/^\[|\]$/g, "")}
+              </h3>
+            )}
+            <div className="space-y-2.5">
+              {bodyLines.map((line, lineIdx) => {
+                const cleaned = line.replace(/^[-*]\s*/, "").replace(/^\d+[.)]\s*/, "");
+                const hasListMarker = /^[-*]\s*/.test(line) || /^\d+[.)]\s*/.test(line);
+                const prevLine = bodyLines[lineIdx - 1] || "";
+                const nextLine = bodyLines[lineIdx + 1] || "";
+                const isNearList =
+                  /^[-*]\s*/.test(prevLine) ||
+                  /^\d+[.)]\s*/.test(prevLine) ||
+                  /^[-*]\s*/.test(nextLine) ||
+                  /^\d+[.)]\s*/.test(nextLine);
+                const isShortLabel = cleaned.length <= 18 && !/[.?!。]$/.test(cleaned);
+                const isList = hasListMarker && isNearList && !isShortLabel;
+
+                if (isList) {
+                  return (
+                    <div key={lineIdx} className="flex gap-2.5 text-[14px] leading-7 text-slate-700">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <p className="font-bold">{cleaned}</p>
+                    </div>
+                  );
+                }
+
+                if (hasListMarker && isShortLabel) {
+                  return (
+                    <h4 key={lineIdx} className="pt-2 text-[13px] font-black text-slate-900">
+                      {cleaned}
+                    </h4>
+                  );
+                }
+
+                return (
+                  <p key={lineIdx} className="text-[14px] font-bold leading-7 text-slate-800">
+                    {cleaned}
+                  </p>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function LegalAdvicePage() {
   const router = useRouter(); // 🚀 라우터 초기화
-  const [messages, setMessages] = useState([
-    { role: "bot", content: "안녕하세요, 전략 법률 고문 AI입니다. 새로운 상담 세션이 시작되었습니다. 도움을 드릴까요?" }
+  const [caseId, setCaseId] = useState("");
+  const [isCaseIdReady, setIsCaseIdReady] = useState(false);
+  const [messages, setMessages] = useState<AdviceMessage[]>([
+    { role: "bot", content: WELCOME_MESSAGE }
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true); 
   const [sessionId, setSessionId] = useState<number | string>(""); 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sessionStorageKey = caseId ? `${LEGAL_SESSION_STORAGE_KEY}:${caseId}` : LEGAL_SESSION_STORAGE_KEY;
+  const welcomeMessage = caseId
+    ? "현재 시뮬레이션 결과를 참고해 상담합니다. 궁금한 내용을 물어보세요."
+    : WELCOME_MESSAGE;
 
-  // 페이지 진입시마다 새로운 세션 생성
+  const createNewSession = async () => {
+    const response = await apiClient.post("/api/chat/legal/sessions", {
+      title: `법률 상담_${new Date().toLocaleTimeString()}`,
+    });
+    const newId = response.data.id;
+    localStorage.setItem(sessionStorageKey, String(newId));
+    setSessionId(newId);
+    setMessages([{ role: "bot", content: welcomeMessage }]);
+    return newId;
+  };
+
+  const loadSessionMessages = async (id: string) => {
+    const response = await apiClient.get(`/api/chat/legal/sessions/${id}/messages`);
+    const loadedMessages: AdviceMessage[] = response.data.map((msg: any) => ({
+      role: msg.role === "user" ? "user" : "bot",
+      content: msg.content,
+    }));
+
+    setSessionId(id);
+    setMessages(
+      loadedMessages.length > 0
+        ? loadedMessages
+        : [{ role: "bot", content: welcomeMessage }]
+    );
+  };
+
   useEffect(() => {
-    const initNewSession = async () => {
+    const params = new URLSearchParams(window.location.search);
+    setCaseId(params.get("caseId") || params.get("case_id") || "");
+    setIsCaseIdReady(true);
+  }, []);
+
+  // 새로고침 시 마지막 세션을 복원하고, 없을 때만 새 세션 생성
+  useEffect(() => {
+    if (!isCaseIdReady) return;
+
+    const initSession = async () => {
       try {
         setIsInitializing(true);
-        const response = await apiClient.post("/api/chat/legal/sessions", {
-          title: `법률 상담_${new Date().toLocaleTimeString()}`,
-        });
-        const newId = response.data.id;
-        setSessionId(newId);
-        console.log(`실제 세션 생성 완료: ID #${newId}`);
+
+        const savedSessionId = localStorage.getItem(sessionStorageKey);
+        if (savedSessionId) {
+          try {
+            await loadSessionMessages(savedSessionId);
+            return;
+          } catch (error) {
+            console.warn("저장된 상담 세션 복원 실패, 새 세션을 생성합니다:", error);
+            localStorage.removeItem(sessionStorageKey);
+          }
+        }
+
+        await createNewSession();
       } catch (error) {
         console.error("세션 초기화 에러:", error);
         alert("상담 세션을 생성할 수 없습니다. 대시보드에서 다시 진입해주세요.");
@@ -35,8 +170,8 @@ export default function LegalAdvicePage() {
         setIsInitializing(false);
       }
     };
-    initNewSession();
-  }, []);
+    initSession();
+  }, [isCaseIdReady, sessionStorageKey]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -53,7 +188,8 @@ export default function LegalAdvicePage() {
 
     try {
       const response = await apiClient.post(`/api/chat/legal/sessions/${sessionId}/messages`, {
-        content: userMessage
+        content: userMessage,
+        case_id: caseId || undefined,
       });
       const botReply = response.data.content || response.data.message || "답변을 가져올 수 없습니다.";
       setMessages(prev => [...prev, { role: "bot", content: botReply }]);
@@ -65,6 +201,20 @@ export default function LegalAdvicePage() {
       }]);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const handleNewSession = async () => {
+    if (isTyping || isInitializing) return;
+
+    try {
+      setIsInitializing(true);
+      await createNewSession();
+    } catch (error) {
+      console.error("새 상담 세션 생성 실패:", error);
+      alert("새 상담을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsInitializing(false);
     }
   };
 
@@ -83,6 +233,13 @@ export default function LegalAdvicePage() {
         
         {/* 우측 상단 뒤로가기 버튼 추가 */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleNewSession}
+            disabled={isTyping || isInitializing}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:border-blue-500 hover:text-blue-600 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+          >
+            새 상담
+          </button>
           <button 
             onClick={() => router.back()} //  이전 페이지로 이동
             className="flex items-center gap-2 px-5 py-2.5 bg-slate-950 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95 group"
@@ -109,12 +266,12 @@ export default function LegalAdvicePage() {
                     <Gavel size={18} />
                   </div>
                 )}
-                <div className={`max-w-[75%] p-5 rounded-[2.2rem] text-[14px] font-bold leading-relaxed shadow-sm ${
+                <div className={`max-w-[78%] p-5 rounded-[2.2rem] text-[14px] font-bold leading-relaxed shadow-sm ${
                   msg.role === "user" 
                   ? "bg-blue-600 text-white rounded-tr-none" 
                   : "bg-white text-slate-800 border border-slate-100 rounded-tl-none"
                 }`}>
-                  {msg.content}
+                  {msg.role === "bot" ? <LegalAdviceBubble content={msg.content} /> : msg.content}
                 </div>
                 {msg.role === "user" && (
                   <div className="w-10 h-10 bg-white border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 shrink-0">
@@ -137,13 +294,19 @@ export default function LegalAdvicePage() {
 
         {/* 입력바 */}
         <div className="p-8 bg-white border-t border-slate-50 flex gap-4 items-center">
-          <input
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
             disabled={isTyping}
+            rows={1}
             placeholder={isTyping ? "AI 분석 대기 중..." : "상담 내용을 입력하세요"}
-            className="flex-1 bg-slate-100/50 border-none rounded-2xl px-8 py-5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-600 transition-all text-slate-800 disabled:opacity-50"
+            className="max-h-32 min-h-[60px] flex-1 resize-none bg-slate-100/50 border-none rounded-2xl px-8 py-5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-600 transition-all text-slate-800 disabled:opacity-50"
           />
           <button 
             onClick={handleSend}

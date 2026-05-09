@@ -1,11 +1,51 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
-  Loader2, Cpu, ArrowRight, Activity, AlertCircle, RefreshCcw, ShieldCheck 
+  Loader2, ArrowRight, Activity, AlertCircle, RefreshCcw, ShieldCheck 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080";
+
+type SimulationLog = {
+  type?: "argument" | "decision" | "verdict";
+  msg?: string;
+  isStreaming?: boolean;
+  round?: number;
+  speaker?: string;
+  decision?: string;
+  value?: string;
+  rationale?: string;
+  order?: string;
+  pending?: boolean;
+};
+
+type SimulationError = {
+  code: string;
+  message: string;
+  failed_at_round?: number;
+};
+
+function renderMarkdownText(text = ""): ReactNode {
+  return text.split("\n").map((line, lineIndex) => {
+    const parts = line.split(/(\*\*.*?\*\*)/g).filter(Boolean);
+
+    return (
+      <span key={lineIndex} className="block min-h-[1.9em]">
+        {parts.map((part, partIndex) => {
+          if (part.startsWith("**") && part.endsWith("**")) {
+            return <strong key={partIndex}>{part.slice(2, -2)}</strong>;
+          }
+
+          return <span key={partIndex}>{part}</span>;
+        })}
+      </span>
+    );
+  });
+}
 
 // --- 내부 컴포넌트: 재판 단계 스테퍼 ---
 function TrialStepper({ currentStep }: { currentStep: number }) {
@@ -48,13 +88,13 @@ export default function SimulationPage() {
   const router = useRouter();
   const caseId = params?.id as string;
 
-  const [logs, setLogs] = useState<any[]>([]);
-  const [caseInfo, setCaseInfo] = useState<any>(null);
+  const [logs, setLogs] = useState<SimulationLog[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [currentEvent, setCurrentEvent] = useState("서버 연결 중...");
   const [isFinished, setIsFinished] = useState(false);
-  const [errorStatus, setErrorStatus] = useState<any>(null);
+  const [errorStatus, setErrorStatus] = useState<SimulationError | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pendingRoundRef = useRef<SimulationLog | null>(null);
 
   // 📝 자동 스크롤 로직
   useEffect(() => {
@@ -69,16 +109,18 @@ export default function SimulationPage() {
 
     const startSimulationStream = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = localStorage.getItem("accessToken");
         
+        const requestedCaseType = new URLSearchParams(window.location.search).get("case_type") || "형사";
+
         // 🚀 422 에러 방지를 위한 데이터 정밀화
         const payload = { 
           case_id: String(caseId),     // 반드시 문자열
-          case_type: "criminal",       // 💡 '형사' 대신 영문 'criminal'로 전송 (백엔드 스키마 호환성)
+          case_type: requestedCaseType,
           start_from_round: 1          // 반드시 숫자(Number)
         };
 
-        const response = await fetch("http://localhost:8080/api/simulation/start", {
+        const response = await fetch(`${API_BASE_URL}/api/simulation/start`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -87,32 +129,54 @@ export default function SimulationPage() {
           body: JSON.stringify(payload),
         });
 
+        if (response.status === 401) {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          document.cookie = "auth_token=; path=/; max-age=0";
+          router.replace("/login");
+          return;
+        }
+
         // 422 또는 기타 에러 발생 시 상세 로깅
         if (!response.ok) {
-          const errorDetail = await response.json();
+          const errorDetail = await response.json().catch(() => null);
           console.error("❌ 백엔드 에러 상세:", errorDetail);
-          throw new Error(errorDetail.detail?.[0]?.msg || "데이터 형식이 맞지 않습니다.");
+          throw new Error(errorDetail?.detail?.[0]?.msg || errorDetail?.detail || "데이터 형식이 맞지 않습니다.");
         }
 
         if (!response.body) return;
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let buffer = "";
 
         while (true) {
           const { value, done } = await reader.read();
-          if (done) break;
+          if (done) {
+            buffer += decoder.decode();
+          } else {
+            buffer += decoder.decode(value, { stream: true });
+          }
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          const eventBlocks = buffer.split(/\r?\n\r?\n/);
+          buffer = eventBlocks.pop() || "";
+          if (done && buffer.trim()) {
+            eventBlocks.push(buffer);
+            buffer = "";
+          }
           
-          for (const line of lines) {
-            if (!line.trim() || !line.startsWith("data:")) continue;
-            
-            const jsonStr = line.replace("data:", "").trim();
+          for (const block of eventBlocks) {
+            const lines = block.split(/\r?\n/);
+            const event = lines.find((line) => line.startsWith("event:"))?.replace("event:", "").trim();
+            const jsonStr = lines
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.replace("data:", "").trim())
+              .join("\n");
+
+            if (!event || !jsonStr) continue;
+
             try {
-              const payload = JSON.parse(jsonStr);
-              const { event, data } = payload;
+              const data = JSON.parse(jsonStr);
 
               // 이벤트명 한글 맵핑
               const eventMap: { [key: string]: string } = {
@@ -130,20 +194,32 @@ export default function SimulationPage() {
 
               switch (event) {
                 case "simulation_start":
-                  setCaseInfo(data);
                   setCurrentStep(0);
                   break;
 
                 case "round_start":
                   setCurrentStep(data.round >= 2 ? 2 : 1);
-                  setLogs(prev => [...prev, { ...data, type: 'argument', msg: "", isStreaming: true }]);
+                  pendingRoundRef.current = { ...data, type: 'argument', msg: "", isStreaming: true, pending: true };
                   break;
 
                 case "token":
                   setLogs(prev => {
+                    const text = typeof data.text === "string" ? data.text : "";
+                    if (!text.trim() && !pendingRoundRef.current) return prev;
+
+                    if (pendingRoundRef.current) {
+                      const pendingLog = {
+                        ...pendingRoundRef.current,
+                        msg: text,
+                        pending: false,
+                      };
+                      pendingRoundRef.current = null;
+                      return [...prev, pendingLog];
+                    }
+
                     const last = prev[prev.length - 1];
-                    if (last && last.type === 'argument') {
-                      return [...prev.slice(0, -1), { ...last, msg: last.msg + data.text }];
+                    if (last && last.type === 'argument' && last.isStreaming) {
+                      return [...prev.slice(0, -1), { ...last, msg: `${last.msg || ""}${text}` }];
                     }
                     return prev;
                   });
@@ -151,8 +227,30 @@ export default function SimulationPage() {
 
                 case "round_end":
                   setLogs(prev => {
+                    const argument = typeof data.argument === "string" ? data.argument.trim() : "";
+                    if (!argument) {
+                      pendingRoundRef.current = null;
+                      return prev;
+                    }
+
+                    if (pendingRoundRef.current) {
+                      const pendingLog = pendingRoundRef.current;
+                      pendingRoundRef.current = null;
+                      return [...prev, { ...pendingLog, ...data, msg: argument, isStreaming: false, pending: false }];
+                    }
+
                     const last = prev[prev.length - 1];
-                    return [...prev.slice(0, -1), { ...last, ...data, msg: data.argument, isStreaming: false }];
+                    if (
+                      last &&
+                      last.type === "argument" &&
+                      last.isStreaming &&
+                      last.round === data.round &&
+                      last.speaker === data.speaker
+                    ) {
+                      return [...prev.slice(0, -1), { ...last, ...data, msg: argument, isStreaming: false }];
+                    }
+
+                    return [...prev, { ...data, type: "argument", msg: argument, isStreaming: false }];
                   });
                   break;
 
@@ -177,10 +275,13 @@ export default function SimulationPage() {
               console.error("데이터 파싱 에러:", e);
             }
           }
+
+          if (done) break;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("연결 오류:", err);
-        setErrorStatus({ code: "연결 오류", message: err.message });
+        const message = err instanceof Error ? err.message : "알 수 없는 연결 오류가 발생했습니다.";
+        setErrorStatus({ code: "연결 오류", message });
       }
     };
 
@@ -219,7 +320,7 @@ export default function SimulationPage() {
             </motion.div>
           )}
 
-          {logs.map((log, index) => (
+          {logs.filter((log) => log.type !== "argument" || Boolean((log.msg || "").trim())).map((log, index) => (
             <motion.div key={index} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className={`flex ${log.type === 'verdict' || log.type === 'decision' ? 'justify-center' : 'justify-start'}`}>
               <div className={`max-w-[80%] p-10 rounded-[3.5rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.05)] border-none ${
                 log.type === 'verdict' ? 'bg-slate-900 text-white ring-[15px] ring-blue-500/5' : 
@@ -243,15 +344,15 @@ export default function SimulationPage() {
                   </div>
                 )}
 
-                <p className="text-[17px] leading-[1.9] font-bold whitespace-pre-wrap tracking-tight">
-                  {log.msg}
+                <div className="text-[17px] leading-[1.9] font-bold tracking-tight">
+                  {renderMarkdownText(log.msg)}
                   {log.isStreaming && <span className="inline-block w-1.5 h-5 ml-2 bg-blue-600 animate-pulse align-middle" />}
-                </p>
+                </div>
 
                 {log.rationale && (
                   <div className={`mt-8 p-7 rounded-[2rem] text-sm ${log.type === 'verdict' ? 'bg-white/5 text-slate-400' : 'bg-white/50 text-blue-900/60'}`}>
                     <span className="block text-[10px] font-black uppercase mb-3 opacity-50 tracking-widest">판단 근거</span>
-                    <p className="leading-relaxed">{log.rationale}</p>
+                    <div className="leading-relaxed">{renderMarkdownText(log.rationale)}</div>
                   </div>
                 )}
               </div>
@@ -281,7 +382,7 @@ export default function SimulationPage() {
             <motion.button 
               initial={{ scale: 0.9, y: 20 }} 
               animate={{ scale: 1, y: 0 }} 
-              onClick={() => router.push(`/simulation/report/${caseId}`)} 
+              onClick={() => router.push(`/simulation/dashboard/${caseId}`)} 
               className="px-14 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-[12px] uppercase tracking-[0.4em] shadow-2xl hover:bg-blue-600 transition-all flex items-center gap-4 group"
             >
               종합 분석 리포트 확인 <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />

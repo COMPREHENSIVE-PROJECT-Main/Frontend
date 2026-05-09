@@ -34,7 +34,7 @@ export default function LoginPage() {
         localStorage.setItem("accessToken", access_token);
         localStorage.setItem("refreshToken", refresh_token);
         
-        document.cookie = `auth_token=true; path=/; max-age=3600`;
+        document.cookie = `auth_token=true; path=/; max-age=315360000`;
         
         console.log("로그인 성공! 토큰 발급 완료");
         
