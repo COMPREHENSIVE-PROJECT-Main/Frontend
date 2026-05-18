@@ -88,12 +88,12 @@ export default function LoginPage() {
                 이메일 주소
               </label>
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full border border-gray-100 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-all text-sm"
-                placeholder="name@example.com"
+                placeholder="아이디를 입력하세요"
               />
             </div>
 

@@ -3,9 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { 
+import {
   Gavel, Target, MessageSquare,
-  BarChart3, Triangle, ArrowLeft, Download, 
+  BarChart3, Triangle, ArrowLeft, Download,
   ShieldCheck, Loader2, Scale, ListChecks, ClipboardCheck
 } from "lucide-react";
 
@@ -60,7 +60,6 @@ export default function SimulationDashboard() {
     window.print();
   };
 
-  // API 데이터 가져오기
   useEffect(() => {
     const fetchReport = async () => {
       const token = localStorage.getItem("accessToken");
@@ -99,8 +98,6 @@ export default function SimulationDashboard() {
     if (caseId) fetchReport();
   }, [caseId, router]);
 
-
-
   if (loading) {
     return (
       <div className="h-screen bg-white flex flex-col items-center justify-center gap-4">
@@ -129,11 +126,13 @@ export default function SimulationDashboard() {
       </div>
     );
   }
+
   const verdictText = data.verdict_text || [
     r.verdict?.sentence,
     r.verdict?.rationale,
     r.verdict?.conclusion,
   ].filter(Boolean).join("<br /><br />");
+
   const isCriminal = r.case_info.case_type === "형사";
   const theme = {
     bg: isCriminal ? "bg-blue-600" : "bg-emerald-600",
@@ -171,24 +170,50 @@ export default function SimulationDashboard() {
 
   return (
     <div className="report-screen min-h-screen bg-[#fcfcfc] text-slate-900 font-sans pb-32">
-      {/* 1. 네비게이션 */}
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 0mm; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          nav { display: none !important; }
+          body { background: white !important; padding: 12mm 14mm !important; }
+          main { margin-top: 6mm !important; padding-left: 0 !important; padding-right: 0 !important; }
+          .space-y-10 > * + * { margin-top: 5mm !important; }
+          .gap-6 { gap: 3mm !important; }
+          .p-8 { padding: 3mm !important; }
+          .p-10 { padding: 4mm !important; }
+          * { box-shadow: none !important; }
+          .bg-slate-900  { background-color: #1e293b !important; }
+          .bg-slate-950  { background-color: #0f172a !important; }
+          .bg-blue-600   { background-color: #2563eb !important; }
+          .bg-emerald-600{ background-color: #059669 !important; }
+          .bg-slate-50   { background-color: #f8fafc !important; }
+          .bg-slate-100  { background-color: #f1f5f9 !important; }
+          .bg-white      { background-color: #ffffff !important; }
+          .pdf-page { page-break-before: always; break-before: page; }
+          .pdf-avoid { page-break-inside: avoid; break-inside: avoid; }
+          .pdf-page > * { page-break-inside: avoid; break-inside: avoid; }
+          h3 { color: #1e293b !important; }
+          h4 { color: #334155 !important; font-size: 9pt !important; font-weight: 900 !important; }
+          .text-slate-300 { color: #475569 !important; }
+          .pb-32 { padding-bottom: 0 !important; }
+          .pb-20 { padding-bottom: 0 !important; }
+          button[class*="fixed"] { display: none !important; }
+        }
+      `}</style>
+
       <nav className="print:hidden sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-8 py-4">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <button onClick={() => router.push('/user')} className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all">
             <ArrowLeft size={14} /> 기록 목록
           </button>
-          
           <div className="flex items-center gap-3">
-            {/* 법률 자문 페이지 이동 버튼 */}
-            <button 
+            <button
               onClick={() => router.push(`/advice?caseId=${encodeURIComponent(caseId)}`)}
               className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 transition-all shadow-sm active:scale-95"
             >
               <MessageSquare size={14} className="text-blue-600" /> AI 법률 자문
             </button>
-
-            {/* PDF 다운로드 버튼 */}
-            <button 
+            <button
               onClick={handleDownloadPDF}
               className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg active:scale-95"
             >
@@ -199,22 +224,6 @@ export default function SimulationDashboard() {
       </nav>
 
       <main className="report-document max-w-6xl mx-auto mt-10 px-6 space-y-10 animate-in fade-in duration-700">
-        <section className="pdf-cover hidden">
-          <div className="pdf-cover-mark">AI Trial Simulation Report</div>
-          <div>
-            <p className="pdf-kicker">{r.case_info.case_type} 사건 분석 보고서</p>
-            <h1>최종 시뮬레이션 보고서</h1>
-            <p className="pdf-case-id">관리번호 {r.case_info.case_id}</p>
-          </div>
-          <div className="pdf-cover-summary">
-            <p>{r.case_info.case_description}</p>
-          </div>
-          <div className="pdf-cover-meta">
-            <span>최종 판단: {r.verdict.decision}</span>
-            <span>{isCriminal ? "산정 형량" : "산정 책임"}: {r.verdict.value}</span>
-            {r.case_info.created_at && <span>작성일: {r.case_info.created_at}</span>}
-          </div>
-        </section>
 
         <header className="pdf-section pdf-avoid grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-end">
           <div className="space-y-5">
@@ -234,7 +243,6 @@ export default function SimulationDashboard() {
               </p>
             </div>
           </div>
-
           <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">최종 판단</span>
@@ -330,7 +338,7 @@ export default function SimulationDashboard() {
             ))}
           </div>
           {data.verdict_text && (
-          <details className="mt-6 rounded-2xl border border-slate-100 bg-white p-5 print:hidden">
+            <details className="mt-6 rounded-2xl border border-slate-100 bg-white p-5 print:hidden">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-xs font-black uppercase tracking-widest text-slate-500">
                 <span>원문 판결문 보기</span>
                 <span className={`rounded-full px-3 py-1 text-[10px] text-white ${theme.bg}`}>원문</span>
@@ -350,22 +358,6 @@ export default function SimulationDashboard() {
             </details>
           )}
         </section>
-
-        {data.verdict_text && (
-          <section className="pdf-page hidden print:block bg-white border border-slate-200 rounded-2xl p-8">
-            <h3 className="text-xl font-black text-slate-950">원문 판결문</h3>
-            <div className="mt-6 grid gap-4">
-              {displayVerdictSections.map((section) => (
-                <article key={section.title} className="rounded-xl border border-slate-200 p-5">
-                  <h4 className="text-sm font-black text-slate-500">{section.title}</h4>
-                  <p className="mt-3 whitespace-pre-line text-sm font-bold leading-7 text-slate-800">
-                    {section.body}
-                  </p>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
 
         <section className="pdf-page grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-7 bg-white border border-slate-100 rounded-[2rem] p-8 shadow-sm">
@@ -448,7 +440,7 @@ export default function SimulationDashboard() {
           </div>
           <div className="overflow-hidden rounded-[2rem] border border-slate-100 bg-white shadow-sm">
             {visibleRounds.map((round: any, idx: number) => (
-              <div key={idx} className="grid grid-cols-1 md:grid-cols-[130px_1fr] gap-5 border-b border-slate-100 p-6 last:border-b-0">
+              <div key={idx} className="grid grid-cols-1 md:grid-cols-[130px_1fr] gap-5 border-b border-slate-100 p-6 last:border-b-0" style={{ pageBreakInside: "avoid", breakInside: "avoid" }}>
                 <div className="space-y-2">
                   <span className="block text-[10px] font-mono font-black uppercase tracking-widest text-slate-300">라운드 {round.round_no}</span>
                   <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black text-white ${idx % 2 === 0 ? 'bg-slate-900' : theme.bg}`}>

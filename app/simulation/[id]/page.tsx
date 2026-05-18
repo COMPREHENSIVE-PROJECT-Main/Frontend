@@ -158,6 +158,7 @@ export default function SimulationPage() {
             buffer += decoder.decode(value, { stream: true });
           }
 
+<<<<<<< Updated upstream
           const eventBlocks = buffer.split(/\r?\n\r?\n/);
           buffer = eventBlocks.pop() || "";
           if (done && buffer.trim()) {
@@ -177,6 +178,24 @@ export default function SimulationPage() {
 
             try {
               const data = JSON.parse(jsonStr);
+=======
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+
+          let currentEvent = "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            if (line.startsWith("event:")) {
+              currentEvent = line.replace("event:", "").trim();
+              continue;
+            }
+            if (!line.startsWith("data:")) continue;
+
+            const jsonStr = line.replace("data:", "").trim();
+            try {
+              const data = JSON.parse(jsonStr);
+              const event = currentEvent;
+>>>>>>> Stashed changes
 
               // 이벤트명 한글 맵핑
               const eventMap: { [key: string]: string } = {

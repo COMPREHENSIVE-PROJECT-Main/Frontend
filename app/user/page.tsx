@@ -81,7 +81,6 @@ export default function UserHistoryDashboard() {
         setCases(caseList);
       } catch (err) {
         const apiError = err as ApiError;
-
         console.warn("Backend connection failed, showing empty state instead of error.");
         setCases([]);
 
@@ -225,6 +224,7 @@ export default function UserHistoryDashboard() {
               사건 기록을 불러오는 중...
             </p>
           </div>
+<<<<<<< Updated upstream
         ) : filteredCases.length > 0 && viewMode === "table" ? (
           <motion.section
             initial={{ opacity: 0, y: 16 }}
