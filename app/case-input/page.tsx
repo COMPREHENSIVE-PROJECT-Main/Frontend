@@ -211,11 +211,10 @@ export default function CaseInputPage() {
       };
       await apiClient.post("/api/cases/input_plus", plusPayload);
 
-      // 시뮬레이션 페이지에서 case_type 사용할 수 있도록 저장
-      sessionStorage.setItem('caseType', type === 'criminal' ? '형사' : '민사');
-
-      // [2] 페이지 이동 (시뮬레이션 시작은 simulation 페이지에서 처리)
-      router.push(`/simulation/${caseId}`);
+      // [2] 시뮬레이션 페이지로 이동 (case_type을 URL 파라미터와 sessionStorage 모두 전달)
+      const caseType = type === 'criminal' ? '형사' : '민사';
+      sessionStorage.setItem('caseType', caseType);
+      router.push(`/simulation/${caseId}?case_type=${encodeURIComponent(caseType)}`);
 
     } catch (error: any) {
       if (error.response?.status === 422) {

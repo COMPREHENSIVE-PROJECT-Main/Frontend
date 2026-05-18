@@ -24,4 +24,18 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (typeof window !== 'undefined' && error.response?.status === 401) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      document.cookie = 'auth_token=; path=/; max-age=0';
+      window.location.href = '/login';
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default apiClient;

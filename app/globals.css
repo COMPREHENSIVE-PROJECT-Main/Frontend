@@ -24,3 +24,210 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm 18mm;
+
+    @top-left {
+      content: "";
+    }
+
+    @top-center {
+      content: "";
+    }
+
+    @top-right {
+      content: "";
+    }
+
+    @bottom-left {
+      content: "";
+    }
+
+    @bottom-center {
+      content: "";
+    }
+
+    @bottom-right {
+      content: "페이지 " counter(page) " / " counter(pages);
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 800;
+    }
+  }
+
+  html,
+  body {
+    width: 210mm;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body {
+    margin: 0;
+  }
+
+  .guide-floating-bot {
+    display: none !important;
+  }
+
+  .report-screen {
+    min-height: auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .report-document {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    animation: none !important;
+  }
+
+  .pdf-cover {
+    display: block !important;
+    break-after: auto;
+    page-break-after: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 10mm;
+    margin-bottom: 8mm;
+    background: #f8fafc;
+  }
+
+  .pdf-cover-mark {
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.28em;
+    color: #64748b;
+    text-transform: uppercase;
+  }
+
+  .pdf-kicker {
+    font-size: 12px;
+    font-weight: 900;
+    color: #2563eb;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .pdf-cover h1 {
+    margin-top: 5mm;
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 900;
+    color: #020617;
+  }
+
+  .pdf-case-id {
+    margin-top: 6mm;
+    font-size: 12px;
+    font-weight: 800;
+    color: #64748b;
+  }
+
+  .pdf-cover-summary {
+    border-top: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 6mm 0;
+    margin-top: 6mm;
+  }
+
+  .pdf-cover-summary p,
+  .pdf-cover-meta {
+    font-size: 13px;
+    line-height: 1.8;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .pdf-cover-meta {
+    display: grid;
+    gap: 3mm;
+    margin-top: 6mm;
+  }
+
+  .pdf-section,
+  .pdf-page {
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  .pdf-page {
+    break-before: auto;
+    page-break-before: auto;
+    break-inside: auto;
+    page-break-inside: auto;
+    min-height: 0 !important;
+    padding-top: 0 !important;
+    margin-top: 8mm !important;
+  }
+
+  .pdf-avoid,
+  article,
+  details,
+  .rounded-2xl,
+  .rounded-\[2rem\],
+  .rounded-\[3rem\] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-document .grid {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .report-document .border-b {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report-document section,
+  .report-document header {
+    margin-bottom: 0 !important;
+  }
+
+  .report-document * {
+    text-shadow: none !important;
+  }
+
+  .report-document .shadow-sm,
+  .report-document .shadow-lg,
+  .report-document .shadow-xl,
+  .report-document .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  .report-document .bg-slate-950,
+  .report-document .bg-slate-900 {
+    background: #0f172a !important;
+    color: #ffffff !important;
+  }
+
+  .report-document svg {
+    max-width: 100%;
+  }
+
+  .report-document button,
+  .report-document details {
+    display: none !important;
+  }
+
+  .report-document .print\:block {
+    display: block !important;
+  }
+
+  .report-document .print\:hidden {
+    display: none !important;
+  }
+
+  .report-document .hidden.print\:block {
+    display: block !important;
+  }
+}

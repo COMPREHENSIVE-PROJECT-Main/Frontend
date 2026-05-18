@@ -34,11 +34,11 @@ export default function LoginPage() {
         localStorage.setItem("accessToken", access_token);
         localStorage.setItem("refreshToken", refresh_token);
         
-        document.cookie = `auth_token=true; path=/; max-age=3600`;
+        document.cookie = `auth_token=true; path=/; max-age=315360000`;
         
         console.log("로그인 성공! 토큰 발급 완료");
         
-        // 로그인 성공 시 사건 입력 페이지로 이동
+        // 로그인 성공 시 사건 목록 페이지로 이동
         router.push("/user");
       }
     } catch (error: any) {
@@ -88,12 +88,12 @@ export default function LoginPage() {
                 이메일 주소
               </label>
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full border border-gray-100 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 focus:bg-white transition-all text-sm"
-                placeholder="name@example.com"
+                placeholder="아이디를 입력하세요"
               />
             </div>
 
