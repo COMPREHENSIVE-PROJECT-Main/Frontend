@@ -158,7 +158,6 @@ export default function SimulationPage() {
             buffer += decoder.decode(value, { stream: true });
           }
 
-<<<<<<< Updated upstream
           const eventBlocks = buffer.split(/\r?\n\r?\n/);
           buffer = eventBlocks.pop() || "";
           if (done && buffer.trim()) {
@@ -178,24 +177,6 @@ export default function SimulationPage() {
 
             try {
               const data = JSON.parse(jsonStr);
-=======
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
-
-          let currentEvent = "";
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            if (line.startsWith("event:")) {
-              currentEvent = line.replace("event:", "").trim();
-              continue;
-            }
-            if (!line.startsWith("data:")) continue;
-
-            const jsonStr = line.replace("data:", "").trim();
-            try {
-              const data = JSON.parse(jsonStr);
-              const event = currentEvent;
->>>>>>> Stashed changes
 
               // 이벤트명 한글 맵핑
               const eventMap: { [key: string]: string } = {
@@ -401,7 +382,10 @@ export default function SimulationPage() {
             <motion.button 
               initial={{ scale: 0.9, y: 20 }} 
               animate={{ scale: 1, y: 0 }} 
-              onClick={() => router.push(`/simulation/dashboard/${caseId}`)} 
+              onClick={() => {
+                const caseType = new URLSearchParams(window.location.search).get("case_type") || sessionStorage.getItem(`case-type:${caseId}`) || "형사";
+                router.push(`/simulation/dashboard/${caseId}?case_type=${encodeURIComponent(caseType)}`);
+              }} 
               className="px-14 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-[12px] uppercase tracking-[0.4em] shadow-2xl hover:bg-blue-600 transition-all flex items-center gap-4 group"
             >
               종합 분석 리포트 확인 <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />
