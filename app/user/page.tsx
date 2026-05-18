@@ -56,6 +56,11 @@ const formatDate = (value: string) => {
   });
 };
 
+const formatCaseNumber = (caseId: string) => {
+  const numberOnly = caseId.match(/\d+$/)?.[0] || caseId.replace(/\D/g, "");
+  return numberOnly || "-";
+};
+
 const hasResultSummary = (item: UserCase) =>
   Boolean(item.result?.trim()) && Boolean(item.summary?.trim());
 
@@ -99,18 +104,14 @@ export default function UserHistoryDashboard() {
       return casesWithResultSummary;
     }
 
+    if (/^\d+$/.test(normalizedKeyword)) {
+      return casesWithResultSummary.filter((item) =>
+        formatCaseNumber(item.case_id).includes(normalizedKeyword),
+      );
+    }
+
     return casesWithResultSummary.filter((item) =>
-      [
-        item.case_id,
-        item.case_type,
-        item.title,
-        item.result,
-        item.summary,
-        item.created_at,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedKeyword),
+      (item.title || "").toLowerCase().includes(normalizedKeyword),
     );
   }, [cases, keyword]);
 
@@ -155,7 +156,7 @@ export default function UserHistoryDashboard() {
                 type="text"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
-                placeholder="사건 검색..."
+                placeholder="제목 검색..."
                 className="w-full border border-slate-100 bg-white py-3 pl-11 pr-4 text-sm font-bold outline-none transition-all focus:border-blue-200 focus:ring-4 focus:ring-blue-500/10"
               />
             </div>
@@ -231,10 +232,10 @@ export default function UserHistoryDashboard() {
             className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm"
           >
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] border-collapse text-left">
+              <table className="w-full min-w-[900px] border-collapse text-left">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    <th className="px-6 py-4">사건 ID</th>
+                    <th className="px-6 py-4">번호</th>
                     <th className="px-6 py-4">사건 유형</th>
                     <th className="px-6 py-4">제목</th>
                     <th className="px-6 py-4">결과</th>
@@ -251,8 +252,8 @@ export default function UserHistoryDashboard() {
                       className="cursor-pointer transition-colors hover:bg-blue-50/50"
                     >
                       <td className="px-6 py-5 align-top">
-                        <span className="font-mono text-xs font-bold text-slate-500">
-                          {item.case_id || "-"}
+                        <span className="font-mono text-xs font-black text-slate-400">
+                          {formatCaseNumber(item.case_id)}
                         </span>
                       </td>
                       <td className="px-6 py-5 align-top">
@@ -317,8 +318,8 @@ export default function UserHistoryDashboard() {
                   <span className="inline-flex rounded-lg border border-blue-100 bg-blue-50 px-3 py-1 text-[10px] font-black text-blue-700">
                     {item.case_type || "-"}
                   </span>
-                  <span className="font-mono text-[11px] font-bold text-slate-400">
-                    {item.case_id || "-"}
+                  <span className="font-mono text-[11px] font-black text-slate-400">
+                    {formatCaseNumber(item.case_id)}
                   </span>
                 </div>
 
