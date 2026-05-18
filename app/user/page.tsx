@@ -33,7 +33,7 @@ export default function UserHistoryDashboard() {
     const fetchCases = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get("/api/user/cases");
+        const response = await apiClient.get("/api/cases");
         setCases(response.data.cases || response.data || []);
       } catch (err: any) {
         console.warn("Backend connection failed, showing empty state instead of error.");
@@ -118,7 +118,7 @@ export default function UserHistoryDashboard() {
                 <motion.div 
                   key={item.id}
                   whileHover={{ y: -8, shadow: "0 20px 40px -15px rgba(0,0,0,0.1)" }}
-                  onClick={() => router.push(`/simulation/report/${item.case_id || item.id}`)}
+                  onClick={() => router.push(`/simulation/dashboard/${item.case_id || item.id}`)}
                   className="group bg-white border border-slate-100 rounded-[2.5rem] p-8 shadow-sm transition-all cursor-pointer relative"
                 >
                   <div className="flex justify-between items-start mb-6">

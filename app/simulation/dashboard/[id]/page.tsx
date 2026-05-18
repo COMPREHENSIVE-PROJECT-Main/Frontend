@@ -21,7 +21,7 @@ export default function SimulationDashboard() {
   // API 데이터 가져오기
   useEffect(() => {
     const fetchReport = async () => {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("accessToken");
       if (!token) {
         router.replace("/login");
         return;
@@ -29,7 +29,7 @@ export default function SimulationDashboard() {
 
       try {
         setLoading(true);
-        const res = await fetch(`http://localhost:8080/api/report/${caseId}`, {
+        const res = await fetch(`http://localhost:8080/api/report/${caseId}/export`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
 
@@ -51,6 +51,10 @@ export default function SimulationDashboard() {
 
 
 
+  const handleDownloadPDF = () => {
+    window.print();
+  };
+
   if (loading) {
     return (
       <div className="h-screen bg-white flex flex-col items-center justify-center gap-4">
@@ -71,7 +75,7 @@ export default function SimulationDashboard() {
   }
 
   const r = data.report;
-  const isCriminal = r.case_info.case_type ? "형사" : "민사";
+  const isCriminal = r.case_info.case_type === "형사";
   const theme = {
     bg: isCriminal ? "bg-blue-600" : "bg-emerald-600",
     color: isCriminal ? "text-blue-600" : "text-emerald-600",
@@ -114,7 +118,7 @@ export default function SimulationDashboard() {
             <span className={`px-3 py-1 rounded-full text-[9px] font-black text-white ${theme.bg}`}>
               {r.case_info.case_type} 사건
             </span>
-            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">관리번호: {data.case_id}</span>
+            <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">관리번호: {caseId}</span>
           </div>
           <h1 className="text-5xl font-black tracking-tight leading-none text-slate-900">AI 시뮬레이션 분석 리포트</h1>
           <p className="text-slate-500 font-bold text-lg leading-relaxed max-w-3xl italic">

@@ -39,7 +39,7 @@ export default function LoginPage() {
         console.log("로그인 성공! 토큰 발급 완료");
         
         // 로그인 성공 시 사건 입력 페이지로 이동
-        router.push("/case-input");
+        router.push("/user");
       }
     } catch (error: any) {
       // 3. 상세 메시지를 그대로 화면에 띄워줌

@@ -166,7 +166,7 @@ export default function CaseInputPage() {
       setMlPredictedType(predicted_type || (description.includes("계약") ? "civil" : "criminal"));
       setIsModalOpen(true);
     } catch (error: any) {
-      alert(error.response?.data?.message || "분석 서버 연결에 실패했습니다.");
+      alert(error.response?.data?.detail || "분석 서버 연결에 실패했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -211,16 +211,10 @@ export default function CaseInputPage() {
       };
       await apiClient.post("/api/cases/input_plus", plusPayload);
 
-      // [2] 🚀 시뮬레이션 시작 트리거 (422 방지 정적 데이터 구조)
-      const startPayload = {
-        case_id: String(caseId),
-        case_type: type === 'criminal' ? '형사' : '민사',
-        start_from_round: 1
-      };
-      
-      await apiClient.post("/api/simulation/start", startPayload);
+      // 시뮬레이션 페이지에서 case_type 사용할 수 있도록 저장
+      sessionStorage.setItem('caseType', type === 'criminal' ? '형사' : '민사');
 
-      // [3] 페이지 이동
+      // [2] 페이지 이동 (시뮬레이션 시작은 simulation 페이지에서 처리)
       router.push(`/simulation/${caseId}`);
 
     } catch (error: any) {

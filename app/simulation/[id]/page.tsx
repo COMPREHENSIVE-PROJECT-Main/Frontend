@@ -55,6 +55,7 @@ export default function SimulationPage() {
   const [isFinished, setIsFinished] = useState(false);
   const [errorStatus, setErrorStatus] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const hasStarted = useRef(false);
 
   // 📝 자동 스크롤 로직
   useEffect(() => {
@@ -65,29 +66,29 @@ export default function SimulationPage() {
 
   // 🔗 SSE 스트리밍 연결 및 자동 시작 로직 (422 에러 대응 버전)
   useEffect(() => {
-    if (!caseId) return;
+    if (!caseId || hasStarted.current) return;
+    hasStarted.current = true;
 
     const startSimulationStream = async () => {
       try {
-        const token = localStorage.getItem("token");
-        
-        // 🚀 422 에러 방지를 위한 데이터 정밀화
-        const payload = { 
-          case_id: String(caseId),     // 반드시 문자열
-          case_type: "criminal",       // 💡 '형사' 대신 영문 'criminal'로 전송 (백엔드 스키마 호환성)
-          start_from_round: 1          // 반드시 숫자(Number)
+        const token = localStorage.getItem("accessToken");
+        const caseType = sessionStorage.getItem("caseType") || "형사";
+
+        const payload = {
+          case_id: String(caseId),
+          case_type: caseType,
+          start_from_round: 1
         };
 
         const response = await fetch("http://localhost:8080/api/simulation/start", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`, 
+            "Authorization": `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
         });
 
-        // 422 또는 기타 에러 발생 시 상세 로깅
         if (!response.ok) {
           const errorDetail = await response.json();
           console.error("❌ 백엔드 에러 상세:", errorDetail);
@@ -99,82 +100,92 @@ export default function SimulationPage() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
+        // SSE 파싱: event: 줄로 이벤트 타입 추적, data: 줄로 데이터 파싱
+        let currentEventType = "";
+
+        const eventMap: { [key: string]: string } = {
+          "simulation_start": "시뮬레이션 시작",
+          "round_start": "공방 진행 중",
+          "token": "데이터 수신 중",
+          "round_end": "공방 대기",
+          "judge_decision": "판사 판단 중",
+          "final_verdict": "최종 판결 중",
+          "simulation_end": "시뮬레이션 종료",
+          "error": "시스템 오류"
+        };
+
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split("\n");
-          
+
           for (const line of lines) {
-            if (!line.trim() || !line.startsWith("data:")) continue;
-            
-            const jsonStr = line.replace("data:", "").trim();
-            try {
-              const payload = JSON.parse(jsonStr);
-              const { event, data } = payload;
+            if (!line.trim()) {
+              currentEventType = "";
+              continue;
+            }
 
-              // 이벤트명 한글 맵핑
-              const eventMap: { [key: string]: string } = {
-                "simulation_start": "시뮬레이션 시작",
-                "round_start": "공방 진행 중",
-                "token": "데이터 수신 중",
-                "round_end": "공방 대기",
-                "judge_decision": "판사 판단 중",
-                "final_verdict": "최종 판결 중",
-                "simulation_end": "시뮬레이션 종료",
-                "error": "시스템 오류"
-              };
+            if (line.startsWith("event:")) {
+              currentEventType = line.replace("event:", "").trim();
+              setCurrentEvent(eventMap[currentEventType] || currentEventType);
+              continue;
+            }
 
-              setCurrentEvent(eventMap[event] || event);
+            if (line.startsWith("data:")) {
+              const jsonStr = line.replace("data:", "").trim();
+              try {
+                const data = JSON.parse(jsonStr);
 
-              switch (event) {
-                case "simulation_start":
-                  setCaseInfo(data);
-                  setCurrentStep(0);
-                  break;
+                switch (currentEventType) {
+                  case "simulation_start":
+                    setCaseInfo(data);
+                    setCurrentStep(0);
+                    break;
 
-                case "round_start":
-                  setCurrentStep(data.round >= 2 ? 2 : 1);
-                  setLogs(prev => [...prev, { ...data, type: 'argument', msg: "", isStreaming: true }]);
-                  break;
+                  case "round_start":
+                    setCurrentStep(data.round >= 2 ? 2 : 1);
+                    setLogs(prev => [...prev, { ...data, type: 'argument', msg: "", isStreaming: true }]);
+                    break;
 
-                case "token":
-                  setLogs(prev => {
-                    const last = prev[prev.length - 1];
-                    if (last && last.type === 'argument') {
-                      return [...prev.slice(0, -1), { ...last, msg: last.msg + data.text }];
-                    }
-                    return prev;
-                  });
-                  break;
+                  case "token":
+                    setLogs(prev => {
+                      const last = prev[prev.length - 1];
+                      if (last && last.type === 'argument') {
+                        return [...prev.slice(0, -1), { ...last, msg: last.msg + data.text }];
+                      }
+                      return prev;
+                    });
+                    break;
 
-                case "round_end":
-                  setLogs(prev => {
-                    const last = prev[prev.length - 1];
-                    return [...prev.slice(0, -1), { ...last, ...data, msg: data.argument, isStreaming: false }];
-                  });
-                  break;
+                  case "round_end":
+                    setLogs(prev => {
+                      const last = prev[prev.length - 1];
+                      return [...prev.slice(0, -1), { ...last, ...data, msg: data.argument, isStreaming: false }];
+                    });
+                    break;
 
-                case "judge_decision":
-                  setLogs(prev => [...prev, { ...data, type: 'decision' }]);
-                  break;
+                  case "judge_decision":
+                    setLogs(prev => [...prev, { ...data, type: 'decision' }]);
+                    break;
 
-                case "final_verdict":
-                  setCurrentStep(3);
-                  setLogs(prev => [...prev, { ...data, type: 'verdict', msg: data.order }]);
-                  break;
+                  case "final_verdict":
+                    setCurrentStep(3);
+                    setLogs(prev => [...prev, { ...data, type: 'verdict', msg: data.order }]);
+                    break;
 
-                case "error":
-                  setErrorStatus(data);
-                  break;
+                  case "error":
+                    setErrorStatus(data);
+                    break;
 
-                case "simulation_end":
-                  setIsFinished(true);
-                  return;
+                  case "simulation_end":
+                    setIsFinished(true);
+                    return;
+                }
+              } catch (e) {
+                console.error("데이터 파싱 에러:", e);
               }
-            } catch (e) {
-              console.error("데이터 파싱 에러:", e);
             }
           }
         }
@@ -281,7 +292,7 @@ export default function SimulationPage() {
             <motion.button 
               initial={{ scale: 0.9, y: 20 }} 
               animate={{ scale: 1, y: 0 }} 
-              onClick={() => router.push(`/simulation/report/${caseId}`)} 
+              onClick={() => router.push(`/simulation/dashboard/${caseId}`)}
               className="px-14 py-6 bg-slate-900 text-white rounded-[2rem] font-black text-[12px] uppercase tracking-[0.4em] shadow-2xl hover:bg-blue-600 transition-all flex items-center gap-4 group"
             >
               종합 분석 리포트 확인 <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />
