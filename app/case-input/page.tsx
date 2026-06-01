@@ -156,7 +156,9 @@ export default function CaseInputPage() {
       formData.append("case_description", description);
       if (file) formData.append("files", file);
 
-      const response = await apiClient.post("/api/cases/input", formData);
+      const response = await apiClient.post("/api/cases/input", formData, {
+        headers: { "Content-Type": undefined },
+      });
 
       const { case_id, questions, predicted_type } = response.data;
       setCaseId(case_id);
@@ -164,7 +166,8 @@ export default function CaseInputPage() {
       setMlPredictedType(predicted_type || (description.includes("계약") ? "civil" : "criminal"));
       setIsModalOpen(true);
     } catch (error: any) {
-      alert(error.response?.data?.detail || "분석 서버 연결에 실패했습니다.");
+      const detail = error.response?.data?.detail;
+      alert(typeof detail === "string" ? detail : "분석 서버 연결에 실패했습니다.");
     } finally {
       setIsSubmitting(false);
     }
@@ -177,7 +180,9 @@ export default function CaseInputPage() {
       const formData = new FormData();
       formData.append("title", title);
       formData.append("case_description", newDesc);
-      const response = await apiClient.post("/api/cases/input", formData);
+      const response = await apiClient.post("/api/cases/input", formData, {
+        headers: { "Content-Type": undefined },
+      });
       setAiQuestions(response.data.questions || []);
     } catch (error) {
       alert("내용 수정 중 분석 오류가 발생했습니다.");
