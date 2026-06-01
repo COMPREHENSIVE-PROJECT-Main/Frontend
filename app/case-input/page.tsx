@@ -156,9 +156,7 @@ export default function CaseInputPage() {
       formData.append("case_description", description);
       if (file) formData.append("files", file);
 
-      const response = await apiClient.post("/api/cases/input", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      const response = await apiClient.post("/api/cases/input", formData);
 
       const { case_id, questions, predicted_type } = response.data;
       setCaseId(case_id);

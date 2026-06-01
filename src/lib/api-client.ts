@@ -1,8 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  //로컬 주소로 설정 (백엔드가 8080 포트에서 돌아가고 있다고 가정)
-  baseURL:'http://127.0.0.1:8080',
+  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8080',
   headers: {
     'Content-Type': 'application/json',
   },
